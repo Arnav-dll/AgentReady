@@ -10,6 +10,7 @@
 ![stack](https://img.shields.io/badge/stack-HTML%20%C2%B7%20CSS%20%C2%B7%20vanilla%20JS-0a66ff)
 ![build](https://img.shields.io/badge/build%20step-none-0f9d6b)
 ![privacy](https://img.shields.io/badge/data%20sent-zero-0f9d6b)
+![license](https://img.shields.io/badge/license-MIT-0f9d6b)
 ![platform](https://img.shields.io/badge/installer-Windows%20first-444b5e)
 
 ![AgentReady landing page](docs/hero.png)
@@ -246,6 +247,17 @@ flowchart LR
     A --> B["Then<br/>desktop pup that notices<br/>what you do by hand"]
     B --> C["Later<br/>sandbox-tested catalog<br/>post-install red-team check"]
 ```
+
+## Team
+
+| | Role |
+|---|---|
+| [@Arnav-dll](https://github.com/Arnav-dll) | Creator and repo owner |
+| [@DhruvJoshi-GIT](https://github.com/DhruvJoshi-GIT) | Collaborator |
+
+## License
+
+[MIT](LICENSE)
 
 ## Credits
 
