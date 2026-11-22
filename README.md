@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🐶 AgentReady
+# AgentReady
 
 ### Why is setting up AI harder than *using* it?
 
