@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AgentReady: the smallest safe AI setup for your goal</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="sky" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+<header class="nav glass">
+  <a class="brand" href="#top"><span class="dot"></span>AgentReady</a>
+  <nav>
+    <a href="#itches">The itches</a>
+    <a href="#how">How it works</a>
+    <a class="btn small" href="#wizard">Fix my setup</a>
+  </nav>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <p class="eyebrow">For students, teachers, developers and everyone in between</p>
+    <h1>Why is setting up AI<br>harder than <em>using</em> it?</h1>
+    <p class="lead">Tell us what you want to get done. AgentReady looks at your laptop and your budget, then builds the smallest safe AI agent setup that gets you there, in one script you can read before you run.</p>
+    <div class="cta">
+      <a class="btn" href="#wizard">Fix my setup</a>
+      <a class="btn ghost" href="#itches">Show me the itches</a>
+    </div>
+    <ul class="stats">
+      <li class="glass"><b>4</b><span>questions, starting with your goal</span></li>
+      <li class="glass"><b>₹0</b><span>new subscriptions added by default</span></li>
+      <li class="glass"><b>1</b><span>readable script, with a dry run</span></li>
+      <li class="glass"><b>0</b><span>data sent anywhere: it all runs in this page</span></li>
+    </ul>
+  </section>
+
+  <section id="itches" class="block">
+    <h2>Where setup itches</h2>
+    <p class="sub">Six questions every beginner asks, and nobody answers in one place.</p>
+    <div class="glass table-wrap">
+      <table>
+        <thead><tr><th>The itch</th><th>Who it hurts</th><th>Itch level</th></tr></thead>
+        <tbody id="itch-rows"></tbody>
+      </table>
+    </div>
+    <p class="fine">Itch level is our team's judgement on a 1 to 5 scale, not survey data.</p>
+  </section>
+
+  <section id="how" class="block">
+    <h2>How it scratches</h2>
+    <div class="how">
+      <article class="glass"><span class="n">1</span><h3>Goal first</h3><p>You say what you want, not which tool. We map the goal to the capabilities it needs.</p></article>
+      <article class="glass"><span class="n">2</span><h3>Fits your machine</h3><p>Low RAM or patchy internet changes the plan. A small local model steps in when it helps.</p></article>
+      <article class="glass"><span class="n">3</span><h3>Minimum stack</h3><p>Every item has a reason. We also list what we left out, and why.</p></article>
+      <article class="glass"><span class="n">4</span><h3>Safe by default</h3><p>Guardrails, a dry run and a safety score before anything touches your laptop.</p></article>
+    </div>
+  </section>
+
+  <section id="wizard" class="block">
+    <h2>Fix my setup</h2>
+    <p class="sub">Four short steps. Nothing is installed until you download and run the script yourself.</p>
+
+    <div class="glass wizard">
+      <ol class="steps" id="steps">
+        <li class="on">Goal</li><li>You</li><li>Machine</li><li>Safety</li><li>Your setup</li>
+      </ol>
+
+      <div class="pane on" data-pane="0">
+        <h3>What do you want to get done?</h3>
+        <textarea id="goal" rows="3" placeholder="e.g. Land a backend internship in 3 months"></textarea>
+        <p class="hint">Or pick one:</p>
+        <div class="chips" id="goal-chips"></div>
+        <p class="match" id="goal-match" aria-live="polite"></p>
+      </div>
+
+      <div class="pane" data-pane="1">
+        <h3>How comfortable are you with a terminal?</h3>
+        <div class="chips" data-group="skill">
+          <button data-value="new" class="chip on">Never used one</button>
+          <button data-value="some" class="chip">Used it a little</button>
+          <button data-value="pro">I live in it</button>
+        </div>
+        <h3>What do you already pay for or have?</h3>
+        <div class="chips" data-group="subs" data-multi>
+          <button data-value="claude">Claude (paid)</button>
+          <button data-value="chatgpt">ChatGPT (paid)</button>
+          <button data-value="google">A Google account</button>
+          <button data-value="none">Nothing yet</button>
+        </div>
+        <p class="hint">We use what you have before suggesting anything new.</p>
+      </div>
+
+      <div class="pane" data-pane="2">
+        <h3>Your machine</h3>
+        <p class="hint" id="detected"></p>
+        <div class="grid">
+          <label>Operating system
+            <select id="os"><option value="windows">Windows</option><option value="mac">macOS</option><option value="linux">Linux</option></select>
+          </label>
+          <label>Memory (RAM)
+            <select id="ram"><option value="4">4 GB or less</option><option value="8">8 GB</option><option value="16">16 GB</option><option value="32">32 GB or more</option></select>
+          </label>
+          <label>Internet
+            <select id="net"><option value="good">Reliable</option><option value="patchy">Patchy or metered</option></select>
+          </label>
+          <label>Daily AI use: <output id="hours-out">1 hour</output>
+            <input type="range" id="hours" min="0.5" max="6" step="0.5" value="1">
+          </label>
+        </div>
+      </div>
+
+      <div class="pane" data-pane="3">
+        <h3>How should the installer behave?</h3>
+        <div class="chips" data-group="mode">
+          <button data-value="learn" class="chip on">Learn: ask me before each step</button>
+          <button data-value="auto">Auto: just get it done</button>
+        </div>
+        <h3>Guardrails</h3>
+        <label class="switch"><input type="checkbox" id="g-destructive" checked><span></span>Block destructive commands (force delete, force push)</label>
+        <label class="switch"><input type="checkbox" id="g-secrets" checked><span></span>Keep the agent out of secret files (.env, keys)</label>
+        <label class="switch"><input type="checkbox" id="g-thirdparty" checked><span></span>Allow community add-ons when they help my goal</label>
+      </div>
+
+      <div class="pane" data-pane="4" id="result"></div>
+
+      <div class="wiz-nav">
+        <button class="btn ghost" id="back" hidden>Back</button>
+        <button class="btn" id="next">Next</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>AgentReady, built for the IIIT hackathon open track. Installer engine ideas reused from PlugStore.</footer>
+
+<!-- Companion pup: sits in the corner, never blocks the page -->
+<aside class="pup" id="pup" aria-label="Companion pup">
+  <div class="bubble glass" id="bubble" role="status" aria-live="polite" hidden>
+    <p id="bubble-text"></p>
+    <div class="bubble-actions">
+      <button id="pup-more">Another tip</button>
+      <button id="pup-snooze">Shh for 10 min</button>
+    </div>
+  </div>
+  <button class="pup-body" id="pup-btn" aria-label="Ask the pup for a tip">
+    <svg viewBox="0 0 120 120" width="76" height="76" aria-hidden="true">
+      <path class="tail" d="M92 86 q18 -6 14 -24" fill="none" stroke="#c98a4b" stroke-width="8" stroke-linecap="round"/>
+      <ellipse cx="60" cy="92" rx="30" ry="20" fill="#e2a868"/>
+      <ellipse class="ear l" cx="30" cy="48" rx="13" ry="24" fill="#a9682f"/>
+      <ellipse class="ear r" cx="90" cy="48" rx="13" ry="24" fill="#a9682f"/>
+      <circle cx="60" cy="52" r="32" fill="#f0bd80"/>
+      <ellipse cx="60" cy="64" rx="17" ry="13" fill="#fff3e2"/>
+      <g class="eyes"><circle cx="47" cy="48" r="4.5" fill="#2b1d12"/><circle cx="73" cy="48" r="4.5" fill="#2b1d12"/></g>
+      <ellipse cx="60" cy="59" rx="5.5" ry="4" fill="#2b1d12"/>
+      <path d="M60 63 v5 M60 68 q-6 6 -11 1 M60 68 q6 6 11 1" fill="none" stroke="#2b1d12" stroke-width="2" stroke-linecap="round"/>
+      <path class="tongue" d="M56 71 q4 9 8 0 z" fill="#ff7a8a"/>
+    </svg>
+  </button>
+</aside>
+
+<script src="app.js"></script>
+</body>
+</html>
