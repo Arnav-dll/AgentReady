@@ -261,4 +261,4 @@ flowchart LR
 
 ## Credits
 
-Built for the IIIT hackathon open track. Installer ideas borrowed from PlugStore, an earlier plugin-store project by one of the team.
+Built for the IIIT hackathon open track.
