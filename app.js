@@ -373,6 +373,9 @@ if (typeof document !== 'undefined') (function () {
     current = { c, plan, man };
     const sc = plan.safety.score, col = sc >= 85 ? 'var(--ok)' : sc >= 65 ? 'var(--warn)' : 'var(--bad)';
     const win = c.os === 'windows';
+    // only show a tip if the tool it leans on is actually in this stack
+    const has = n => plan.goal.needs.includes(n);
+    const tips = plan.goal.tips.filter(t => (!/pandoc/i.test(t) || has('pandoc')) && (!/gh/.test(t) || has('gh')));
     $('#result').innerHTML =
       '<p class="verdict">' + plan.steps.length + ' things to set up. ' + plan.skipped.length + ' left out on purpose.</p>' +
       '<p class="note">For: <b>' + esc(man.goal) + '</b><br>' + esc(plan.goal.read) + '</p>' +
@@ -388,6 +391,7 @@ if (typeof document !== 'undefined') (function () {
         '<div class="card cost"><h4>Cost</h4><b>₹0 new spend</b><p>' + esc(plan.cost.text) + '</p><p class="fine">A rough estimate. Provider limits change.</p></div>' +
       '</div></div>' +
       '<div class="card firstwin"><h4>Your first win, ready to paste</h4><blockquote>' + esc(plan.goal.firstWin) + '</blockquote></div>' +
+      '<div class="card tips"><h4>After your first win</h4><ol>' + tips.map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div>' +
       '<div class="actions">' +
         '<button class="btn" id="dl-ps1">Download installer (.ps1)</button>' +
         '<button class="btn ghost" id="preview">Preview dry run</button>' +
