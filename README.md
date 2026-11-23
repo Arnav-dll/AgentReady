@@ -218,7 +218,14 @@ bash agentready-setup.sh --learn     # ask before each step
 bash agentready-setup.sh --auto      # install everything
 ```
 
-Tools that are already installed are skipped, and existing workspace files are never overwritten. If `winget` is not recognised on a Windows machine, the script re-registers App Installer first, and stops with instructions if that does not work.
+Give the setup a name on the last screen and it goes into the file name (`agentready-college-laptop.cmd`), so several downloads are easy to tell apart.
+
+Tools that are already installed are skipped, and existing workspace files are never overwritten. A step counts as done when its tool is really there afterwards, whatever the installer reported, and the script exits with an error if any step failed. On Windows, a setup that installs an agent through Node also allows locally made PowerShell scripts for your account (`RemoteSigned`), because Windows otherwise blocks the agent from starting. If `winget` is not recognised on a Windows machine, the script re-registers App Installer first, and stops with instructions if that does not work.
+
+## Testing
+
+- `node test/make-installers.js` builds three sample installers (free, paid Claude with an offline backup, offline only).
+- `.github/workflows/installers.yml` runs each of them for real on clean Windows, macOS and Linux machines, then `test/verify.js` checks that every step finished, the workspace files exist and each installed tool answers.
 
 ## Project layout
 
@@ -226,7 +233,8 @@ Tools that are already installed are skipped, and existing workspace files are n
 AgentReady/
 ├── index.html      # landing page and wizard
 ├── styles.css      # matte paper design system and motion
-├── app.js          # goal reader, recommender, scoring, script generator
+├── app.js          # goal reader, recommender, scoring, script generators
+├── test/           # sample installers and the post-install check used by CI
 └── docs/
     └── hero.png
 ```

@@ -1,0 +1,55 @@
+name: Installers on clean machines
+
+# Runs the generated installers for real (not a dry run) on fresh Windows, macOS and Linux machines,
+# then checks that every step finished and every installed tool answers.
+on:
+  workflow_dispatch:
+  push:
+    paths: ['app.js', 'test/**', '.github/workflows/installers.yml']
+
+jobs:
+  install:
+    name: ${{ matrix.case }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        case: [free, claude, offline]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the installers
+        run: node test/make-installers.js
+      - name: Dry run (must change nothing)
+        if: runner.os != 'Windows'
+        run: bash test/out/agentready-${{ matrix.case }}.sh --dry-run && test ! -e "$HOME/AgentReady-Workspace"
+      - name: Dry run (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call test\out\agentready-${{ matrix.case }}.cmd -DryRun
+          if errorlevel 1 exit /b 1
+          if exist "%USERPROFILE%\AgentReady-Workspace" exit /b 1
+      - name: Real install
+        if: runner.os != 'Windows'
+        run: bash test/out/agentready-${{ matrix.case }}.sh --auto
+      - name: Real install (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: call test\out\agentready-${{ matrix.case }}.cmd -Auto
+      - name: Check the machine
+        run: node test/verify.js ${{ matrix.case }}
+      - name: Second run skips what is done and keeps the files
+        if: runner.os != 'Windows'
+        run: bash test/out/agentready-${{ matrix.case }}.sh --auto | tee second.txt && grep -q "not overwritten" second.txt
+      - name: Second run (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call test\out\agentready-${{ matrix.case }}.cmd -Auto > second.txt
+          type second.txt
+          findstr /c:"not overwritten" second.txt

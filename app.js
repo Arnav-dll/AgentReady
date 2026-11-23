@@ -78,7 +78,7 @@ const AGENTS = {
 
 // Install commands per operating system. Windows uses winget, macOS uses Homebrew, and Linux uses
 // whichever package manager the machine has (the .sh script works that out when it runs).
-const WINGET = id => 'winget install --id ' + id + ' -e --accept-source-agreements --accept-package-agreements';
+const WINGET = id => 'winget install --id ' + id + ' -e --source winget --accept-source-agreements --accept-package-agreements';
 const PMS = ['apt', 'dnf', 'pacman', 'zypper'];
 const PKG = (apt, pacman) => ({ apt: 'sudo apt-get install -y ' + apt, dnf: 'sudo dnf install -y ' + apt,
                                 pacman: 'sudo pacman -S --needed --noconfirm ' + (pacman || apt), zypper: 'sudo zypper install -y ' + apt });
@@ -177,6 +177,10 @@ function recommend(ctx) {
     tool('base', 'git', chatOnly ? 'Saves versions of your code, so a bad change is one command away from undone.'
       : 'Agents save and undo their work with Git. It is your safety net when an edit goes wrong.');
   if (!chatOnly && agent.node !== false) tool('base', 'node', 'The agent itself is installed through Node\'s package manager.');
+  if (os === 'windows' && !chatOnly && agent.node !== false)
+    add('base', 'Script permission', 'Windows blocks PowerShell scripts by default, and an agent installed through Node starts from one, so it would refuse to open. This allows scripts made on this PC, for your account only. Downloaded scripts still need a signature.', null,
+      'try { Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force -ErrorAction Stop } catch [System.Security.SecurityException] { }',
+      { test: "@('RemoteSigned','Unrestricted','Bypass') -contains [string](Get-ExecutionPolicy -Scope CurrentUser) -or @('RemoteSigned','Unrestricted','Bypass') -contains [string](Get-ExecutionPolicy -Scope LocalMachine)" });
   if (ctx.skill === 'pro') skipped.push({ name: 'VS Code', why: 'You already have an editor you like.' });
   else if (chatOnly && !goal.codey) skipped.push({ name: 'VS Code', why: 'A chat-only setup makes no files to browse. Add an editor when you start writing code.' });
   else tool('editor', 'code', ctx.skill === 'new'
@@ -309,7 +313,7 @@ function safety(agentId, ctx, thirdParty, chatOnly, os) {
 function buildManifest(plan, ctx) {
   return { tool: 'AgentReady', version: 2, goal: plan.goal.label, mode: ctx.mode, os: plan.os, brain: plan.brain,
            workspace: '~/AgentReady-Workspace', agentCommand: plan.agentCommand,
-           steps: plan.steps.map(s => Object.assign({ name: s.name, why: s.why, check: s.check || '', run: s.run }, s.alt ? { alt: s.alt } : null)),
+           steps: plan.steps.map(s => Object.assign({ name: s.name, why: s.why, check: s.check || '', run: s.run }, s.alt ? { alt: s.alt } : null, s.test ? { test: s.test } : null)),
            files: plan.files.map(f => ({ path: f.path, content: f.content })) };
 }
 
@@ -324,13 +328,30 @@ function buildPs1(manifest) {
     json,
     "'@ | ConvertFrom-Json",
     "$learnMode = $Learn -or (($plan.mode -eq 'learn') -and -not $Auto)",
-    "function Update-SessionPath { $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') + ';' + (Join-Path $env:LOCALAPPDATA 'Microsoft\\WindowsApps') }",
+    "function Update-SessionPath { $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') + ';' + (Join-Path $env:LOCALAPPDATA 'Microsoft\\WindowsApps') + ';' + (Join-Path $env:LOCALAPPDATA 'agy\\bin') + ';' + (Join-Path $env:APPDATA 'npm') + ';' + (Join-Path $env:LOCALAPPDATA 'Programs\\Microsoft VS Code\\bin') + ';' + (Join-Path $env:LOCALAPPDATA 'Programs\\Ollama') }",
+    '# Is this step already done? Either its command exists, or its own test says so.',
+    'function Test-Step($s) {',
+    '  if ($s.check -and (Get-Command $s.check -ErrorAction SilentlyContinue)) { return $true }',
+    '  if ($s.test) { try { return [bool](Invoke-Expression $s.test) } catch { return $false } }',
+    '  return $false',
+    '}',
+    '# Old Windows 10 builds default to a web security setting that download servers no longer accept.',
+    'try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }',
     "Write-Host ''",
     "Write-Host ('AgentReady: ' + $plan.goal) -ForegroundColor Magenta",
     "if ($DryRun) { Write-Host 'DRY RUN: nothing will be changed.' -ForegroundColor Yellow }",
     '# winget ships with Windows 10 and 11, but on some machines it is not registered yet. Repair it before any step needs it.',
-    "$needsWinget = @($plan.steps | Where-Object { $_.run -like 'winget *' -and -not ($_.check -and (Get-Command $_.check -ErrorAction SilentlyContinue)) }).Count -gt 0",
+    "$needsWinget = @($plan.steps | Where-Object { $_.run -like 'winget *' -and -not (Test-Step $_) }).Count -gt 0",
     'Update-SessionPath',
+    '# Everything is downloaded, so check the internet before changing anything.',
+    '$todo = @($plan.steps | Where-Object { -not (Test-Step $_) }).Count',
+    'if (-not $DryRun -and $todo -gt 0) {',
+    "  $online = $false; try { [void][Net.Dns]::GetHostAddresses('github.com'); $online = $true } catch { }",
+    '  if (-not $online) {',
+    "    Write-Host 'No internet connection found. The tools have to be downloaded, so connect and run this again. Nothing was changed.' -ForegroundColor Red",
+    '    exit 1',
+    '  }',
+    '}',
     'if ($needsWinget -and -not (Get-Command winget -ErrorAction SilentlyContinue)) {',
     "  $fix = 'Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe'",
     "  Write-Host ''",
@@ -354,8 +375,8 @@ function buildPs1(manifest) {
     "  Write-Host ''",
     "  Write-Host ('[{0}/{1}] {2}' -f $i, $total, $s.name) -ForegroundColor Cyan",
     "  Write-Host ('      why: ' + $s.why)",
-    '  if ($s.check -and (Get-Command $s.check -ErrorAction SilentlyContinue)) {',
-    "    Write-Host '      already installed, skipping' -ForegroundColor Green",
+    '  if (Test-Step $s) {',
+    "    Write-Host '      already in place, skipping' -ForegroundColor Green",
     "    $log += [pscustomobject]@{ step = $s.name; status = 'present' }; continue",
     '  }',
     "  Write-Host ('      run: ' + $s.run) -ForegroundColor Yellow",
@@ -364,9 +385,22 @@ function buildPs1(manifest) {
     "    $a = Read-Host '      Run this step? (y/n)'",
     "    if ($a -ne 'y') { Write-Host '      skipped by you'; $log += [pscustomobject]@{ step = $s.name; status = 'skipped' }; continue }",
     '  }',
-    '  $ok = $true',
+    "  if ($s.run -like 'ollama pull*') {",
+    '    # the download needs the Ollama service: wait for it, and start it if the installer did not',
+    '    for ($n = 0; $n -lt 15; $n++) {',
+    '      & ollama list *> $null',
+    '      if ($LASTEXITCODE -eq 0) { break }',
+    "      if ($n -eq 3) { Start-Process ollama -ArgumentList 'serve' -WindowStyle Hidden }",
+    '      Start-Sleep -Seconds 2',
+    '    }',
+    '  }',
+    '  $ok = $true; $global:LASTEXITCODE = 0',
     '  try { Invoke-Expression $s.run; if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) { $ok = $false } } catch { $ok = $false; Write-Host $_ -ForegroundColor Red }',
     '  Update-SessionPath',
+    '  # winget reports an error when the app is already there or already up to date. That is a pass.',
+    "  if (-not $ok -and $s.run -like 'winget *' -and @(-1978335189, -1978335135) -contains $LASTEXITCODE) { $ok = $true }",
+    '  # what counts is whether the tool is there now, not what the installer said',
+    '  if (-not $ok -and ($s.check -or $s.test) -and (Test-Step $s)) { $ok = $true }',
     "  if ($ok) { Write-Host '      done' -ForegroundColor Green } else { Write-Host '      FAILED: later steps may need this. Fix it and run the script again; finished steps are skipped.' -ForegroundColor Red }",
     "  $log += [pscustomobject]@{ step = $s.name; status = $(if ($ok) { 'installed' } else { 'failed' }) }",
     '}',
@@ -391,6 +425,8 @@ function buildPs1(manifest) {
     "  Write-Host ('  ' + $plan.agentCommand)",
     "  Write-Host '  ...and paste the prompt from FIRST_TASK.md'",
     '}',
+    "$failed = @($log | Where-Object { $_.status -eq 'failed' }).Count",
+    "if ($failed -gt 0) { Write-Host ''; Write-Host ($failed.ToString() + ' step(s) failed. Fix them and run this again: finished steps are skipped.') -ForegroundColor Red; exit 1 }",
     '',
   ].join('\r\n');
 }
@@ -434,7 +470,11 @@ function buildSh(mac, linux) {
     "  *) echo 'This script is for macOS and Linux. On Windows, download the .ps1 installer from AgentReady instead.'; exit 1 ;;",
     'esac',
     'if [ "$DRY" = 0 ] && [ "$(id -u)" = 0 ]; then',
-    "  echo 'Run this as your normal user, not with sudo. It asks for your password only when a step needs it.'; exit 1",
+    '  if [ "$OS" = mac ]; then',
+    "    echo 'Run this as your normal user, not with sudo. It asks for your password only when a step needs it.'; exit 1",
+    '  fi',
+    '  # Linux as root (a server or a container): there may be no sudo, and none is needed.',
+    '  if ! command -v sudo >/dev/null 2>&1; then sudo() { if [ "$1" = -E ]; then shift; fi; "$@"; }; fi',
     'fi',
     '',
     '# Linux: find the package manager. pm picks the matching command for a step.',
@@ -503,6 +543,7 @@ function buildSh(mac, linux) {
     'note() { LOG="$LOG${LOG:+,}{\\"step\\":\\"$1\\",\\"status\\":\\"$2\\"}"; }',
     '',
     'I=0',
+    'FAILED=0',
     'APT_FRESH=0',
     'step() {  # name, why, command to check for, install command',
     '  I=$((I + 1)); name=$1; why=$2; check=$3; run=$4',
@@ -528,13 +569,16 @@ function buildSh(mac, linux) {
     "    'npm install -g'*) npm_prefix ;;",
     "    'ollama pull'*) ollama_up ;;",
     '  esac',
-    '  if eval "$run"; then',
+    '  ok=1; eval "$run" || ok=0',
+    '  refresh_path',
+    '  # what counts is whether the tool is there now, not what the installer said',
+    '  if [ "$ok" = 0 ] && [ -n "$check" ] && have "$check"; then ok=1; fi',
+    '  if [ "$ok" = 1 ]; then',
     "    say \"$G\" '      done'; note \"$name\" installed",
     '  else',
     "    say \"$R\" '      FAILED: later steps may need this. Fix it and run the script again; finished steps are skipped.'",
-    '    note "$name" failed',
+    '    note "$name" failed; FAILED=$((FAILED + 1))',
     '  fi',
-    '  refresh_path',
     '}',
     '',
     'write_file() {  # path inside the workspace; the content arrives on standard input',
@@ -549,6 +593,11 @@ function buildSh(mac, linux) {
     'say "$M" "AgentReady: $GOAL"',
     "if [ \"$DRY\" = 1 ]; then say \"$Y\" 'DRY RUN: nothing will be changed.'; fi",
     'refresh_path',
+    '# Everything is downloaded, so check the internet before changing anything.',
+    'if [ "$DRY" = 0 ] && command -v curl >/dev/null 2>&1 && ! curl -fsS -m 15 -o /dev/null https://github.com; then',
+    "  say \"$R\" 'No internet connection found. The tools have to be downloaded, so connect and run this again. Nothing was changed.'",
+    '  exit 1',
+    'fi',
     '',
     'if [ "$OS" = mac ]; then',
     '  TOTAL=' + mac.steps.length,
@@ -575,6 +624,11 @@ function buildSh(mac, linux) {
     "    echo 'If the new terminal cannot find the agent, add this line to ~/.bashrc or ~/.zshrc and open another:'",
     "    echo '  export PATH=\"$HOME/.local/bin:$PATH\"'",
     '  fi',
+    '  if [ "$FAILED" -gt 0 ]; then',
+    "    echo ''",
+    '    say "$R" "$FAILED step(s) failed. Fix them and run this again: finished steps are skipped."',
+    '    exit 1',
+    '  fi',
     'fi',
     '',
   ]).join('\n');
@@ -593,6 +647,7 @@ function buildCmd(ps1) {
     'set "AR_SELF=%~f0"',
     'set "AR_PS1=%TEMP%\\agentready-setup-%RANDOM%.ps1"',
     'set "AR_ARGS=%*"',
+    'set "AR_CODE=0"',
     'powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = [IO.File]::ReadAllText($env:AR_SELF); $i = $t.IndexOf([char]35 + \'AGENTREADY-POWERSHELL-PART\'); [IO.File]::WriteAllText($env:AR_PS1, $t.Substring($i), (New-Object Text.UTF8Encoding($true)))"',
     'if not exist "%AR_PS1%" (echo Could not start PowerShell. Nothing was changed. & goto end)',
     'if not "%~1"=="" goto run',
@@ -614,11 +669,12 @@ function buildCmd(ps1) {
     'goto menu',
     ':run',
     'powershell -NoProfile -ExecutionPolicy Bypass -File "%AR_PS1%" %AR_ARGS%',
+    'set "AR_CODE=%ERRORLEVEL%"',
     ':end',
     'del "%AR_PS1%" >nul 2>&1',
     'echo.',
     'if "%~1"=="" pause',
-    'exit /b',
+    'exit /b %AR_CODE%',
     '',
     '#AGENTREADY-POWERSHELL-PART',
     ps1.split('\r\n').slice(3).join('\r\n'),
@@ -626,15 +682,22 @@ function buildCmd(ps1) {
 }
 
 // The right installer for an operating system: a double-clickable .cmd on Windows, one shell script for macOS and Linux.
-function buildInstaller(ctx, os) {
-  const man = o => buildManifest(recommend(Object.assign({}, ctx, { os: o })), ctx);
-  if (os === 'windows') return { name: 'agentready-setup.cmd', text: buildCmd(buildPs1(man('windows'))), flag: '-DryRun',
-    runline: '.\\agentready-setup.cmd -DryRun' };
-  return { name: 'agentready-setup.sh', text: buildSh(man('mac'), man('linux')), flag: '--dry-run',
-    runline: 'bash agentready-setup.sh --dry-run' };
+// A setup name becomes part of the file name, so several downloads do not all end up as "agentready-setup (3)".
+function fileBase(name) {
+  const slug = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  return 'agentready-' + (slug || 'setup');
 }
 
-if (typeof module !== 'undefined') module.exports = { GOALS, understand, localModel, recommend, buildManifest, buildPs1, buildCmd, buildSh, buildInstaller };
+function buildInstaller(ctx, os, name) {
+  const man = o => buildManifest(recommend(Object.assign({}, ctx, { os: o })), ctx);
+  const win = os === 'windows', file = fileBase(name) + (win ? '.cmd' : '.sh');
+  const text = win ? buildCmd(buildPs1(man('windows'))) : buildSh(man('mac'), man('linux'));
+  return { name: file, flag: win ? '-DryRun' : '--dry-run',
+           text: text.split(win ? 'agentready-setup.cmd' : 'agentready-setup.sh').join(file),
+           runline: win ? '.\\' + file + ' -DryRun' : 'bash ' + file + ' --dry-run' };
+}
+
+if (typeof module !== 'undefined') module.exports = { GOALS, understand, localModel, recommend, buildManifest, buildPs1, buildCmd, buildSh, fileBase, buildInstaller };
 
 // ---------- UI ----------
 if (typeof document !== 'undefined') (function () {
@@ -747,7 +810,8 @@ if (typeof document !== 'undefined') (function () {
     current = { c, plan, man };
     const sc = plan.safety.score, col = sc >= 85 ? 'var(--ok)' : sc >= 65 ? 'var(--warn)' : 'var(--bad)';
     const win = c.os === 'windows', tips = plan.tips;
-    const inst = buildInstaller(c, win ? 'windows' : 'mac'), other = buildInstaller(c, win ? 'mac' : 'windows');
+    const pack = () => ({ inst: buildInstaller(c, win ? 'windows' : 'mac', S.setupName), other: buildInstaller(c, win ? 'mac' : 'windows', S.setupName) });
+    const inst = pack().inst;
     const where = { cloud: 'Runs on online models.', both: 'Runs on online models, with an offline model as backup.', local: 'Runs offline, on your own machine.' }[plan.brain];
     $('#result').innerHTML =
       '<p class="verdict">' + plan.steps.length + ' things to set up. ' + plan.skipped.length + ' left out on purpose.</p>' +
@@ -765,20 +829,23 @@ if (typeof document !== 'undefined') (function () {
       '</div></div>' +
       '<div class="card firstwin"><h4>Your first win, ready to paste</h4><blockquote>' + esc(plan.firstWin) + '</blockquote></div>' +
       '<div class="card tips"><h4>After your first win</h4><ol>' + tips.map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div>' +
+      '<label class="setup-name">Setup name <span>(optional: it goes in the file name, so your downloads are easy to tell apart)</span>' +
+        '<input type="text" id="setup-name" maxlength="40" autocomplete="off" spellcheck="false" placeholder="Anything works, e.g. college laptop" value="' + esc(S.setupName || '') + '"></label>' +
       '<div class="actions">' +
         '<button class="btn" id="dl-main">Download installer for ' + (win ? 'Windows (.cmd)' : c.os === 'mac' ? 'macOS (.sh)' : 'Linux (.sh)') + '</button>' +
         '<button class="btn ghost" id="preview">Preview dry run</button>' +
         '<button class="btn ghost" id="dl-other">' + (win ? 'macOS and Linux version (.sh)' : 'Windows version (.cmd)') + '</button>' +
         '<button class="btn ghost" id="dl-json">Download manifest (.json)</button></div>' +
-      '<div class="runline">' + esc(inst.runline) + '</div>' +
+      '<div class="runline" id="runline">' + esc(inst.runline) + '</div>' +
       '<p class="note">' + (win ? 'Easiest: double-click the downloaded file and type 1 for a preview that changes nothing. Windows may ask "Are you sure you want to run this?" because it came from the internet. Or run the line above in a terminal from your Downloads folder; drop <code>' + inst.flag + '</code> to install.'
           : 'Run that first from your Downloads folder to see every step without changing anything. Drop <code>' + inst.flag + '</code> to install.') +
         (win ? '' : ' The same file works on macOS and Linux: it uses Homebrew on a Mac, and apt, dnf, pacman or zypper on Linux.') + '</p>' +
       '<div class="term" id="term" hidden></div>';
     requestAnimationFrame(() => requestAnimationFrame(() => { const r = $('.ring'); if (r) r.style.setProperty('--v', sc); }));
-    $('#dl-main').onclick = () => download(inst.name, inst.text);
-    $('#dl-other').onclick = () => download(other.name, other.text);
-    $('#dl-json').onclick = () => download('agentready-setup.json', JSON.stringify(man, null, 2));
+    $('#setup-name').oninput = e => { S.setupName = e.target.value; $('#runline').textContent = pack().inst.runline; };
+    $('#dl-main').onclick = () => { const i = pack().inst; download(i.name, i.text); };
+    $('#dl-other').onclick = () => { const i = pack().other; download(i.name, i.text); };
+    $('#dl-json').onclick = () => download(fileBase(S.setupName) + '.json', JSON.stringify(man, null, 2));
     $('#preview').onclick = () => {
       const t = $('#term'), n = man.steps.length;
       t.hidden = false;
