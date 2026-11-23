@@ -12,41 +12,55 @@ const ITCHES = [
 
 const GOALS = [
   { id: 'career', label: 'Land an internship or job',
-    keys: ['intern', 'job', 'hire', 'resume', 'portfolio', 'placement', 'interview', 'career'],
-    needs: ['git', 'gh', 'skills'],
+    keys: ['intern(ship)?s?', 'jobs?', 'hired?|hiring', 'resume|cv', 'portfolio', 'placements?', 'interviews?', 'career', 'freelanc\\w*', 'linkedin'],
     firstWin: 'Interview me in 5 questions about my skills and the role I want, then propose one portfolio project I can finish in two weeks. Scaffold it here with a README, and explain each file as you create it.',
     tips: ['Once the first project runs, ask your agent to write tests. Reviewers open the tests folder.',
            'Ask for three resume bullets from this project, then ask it to quiz you on your own code.',
            'Push the project to GitHub with the gh tool I set up. A link beats a claim.'] },
   { id: 'study', label: 'Finish assignments and actually learn',
-    keys: ['assignment', 'homework', 'learn', 'study', 'exam', 'course', 'dsa', 'college', 'understand'],
-    needs: ['git'],
+    keys: ['assignments?', 'homework', 'learn(ing)?', 'stud(y|ying|ies)', 'student', 'exams?', 'courses?', 'dsa', 'college|school|university', 'understand', 'semester', 'viva', 'tutorials?'],
     firstWin: 'I am a student. Take the assignment I describe next, break it into steps, and make me attempt each step before you show a solution. After each step, ask me one question to check I understood.',
     tips: ['Stuck? Ask "explain this like I missed the last lecture" before asking for the answer.',
            'After finishing, ask for five viva questions on your own solution.',
            'Keep each assignment in its own folder so the agent stays focused and cheap.'] },
   { id: 'teach', label: 'Teach and grade faster',
-    keys: ['teach', 'grade', 'grading', 'rubric', 'lesson', 'class', 'students', 'papers', 'quiz', 'lecture'],
-    needs: ['pandoc'],
+    keys: ['teach(er|ing|es)?', 'grad(e|es|ing)', 'rubrics?', 'lessons?', 'class(es|room)?', 'students', 'papers', 'quiz(zes)?', 'lectures?', 'syllabus', 'worksheets?'],
     firstWin: 'I am a teacher. Ask me for one assignment brief, then write a 4-level grading rubric for it, three sample feedback comments per level, and five viva questions that reveal whether a student understands their own submission.',
     tips: ['Drop submissions into a folder and ask for feedback drafts. You stay the grader; it does the typing.',
            'Ask for a quiz in three difficulty levels from one lesson note.',
            'Pandoc is installed, so ask for the rubric as a Word file.'] },
   { id: 'automate', label: 'Automate my dev work',
-    keys: ['automate', 'automation', 'project', 'build', 'app', 'code', 'ship', 'deploy', 'refactor', 'test', 'bug'],
-    needs: ['git', 'gh', 'skills'],
+    keys: ['automat\\w*', 'refactor\\w*', 'deploy\\w*', 'ship', 'tests?|testing', 'bugs?|debug\\w*', 'repo(sitory)?s?', 'codebase', 'pull requests?', 'dev', 'scripts?'],
     firstWin: 'Read this repository, summarise how it is structured, list the three riskiest untested areas, and propose a plan to add tests for the first one. Wait for my approval before editing.',
     tips: ['Ask for a plan first, then approve. It costs fewer tokens than fixing a wrong guess.',
            'Start a fresh session per task. Long sessions cost more and drift.',
            'Let the agent open pull requests with gh, and review them like a teammate\'s.'] },
   { id: 'research', label: 'Research and write',
-    keys: ['research', 'paper', 'thesis', 'write', 'report', 'essay', 'literature', 'article', 'notes'],
-    needs: ['pandoc'],
+    keys: ['research', 'paper', 'thesis|dissertation', 'writ(e|ing)', 'reports?', 'essays?', 'literature', 'articles?', 'notes', 'blogs?', 'books?', 'summar\\w*'],
     firstWin: 'I am writing about a topic I will describe next. Ask me three scoping questions, then produce an outline with the claims that need sources marked clearly. Do not invent citations.',
     tips: ['Ask it to mark every claim that needs a source. Then check those yourself.',
            'Keep notes as Markdown files here. The agent can search and connect them.',
            'Pandoc is installed, so the draft can become a PDF or Word file in one request.'] },
 ];
+
+// What the words of a goal imply, whatever the goal is. Several can apply at once.
+const CAPS = [
+  { label: 'writing code', needs: ['git'],
+    keys: 'cod(e|ing)|program(s|ming|mer)?|apps?|web ?(site|app|page)s?|software|scripts?|bots?|games?|apis?|python|javascript|typescript|java|c\\+\\+|rust|html|css|react|sql|flutter|kotlin|backend|frontend|full ?stack|dsa|algorithms?|leetcode|machine learning|develop(er|ment|ing)?|dev|hackathon|arduino' },
+  { label: 'showing your work to others', needs: ['git', 'gh', 'skills'],
+    keys: 'intern(ship)?s?|jobs?|hired?|hiring|placements?|portfolio|career|github|open ?source|hackathon|freelanc\\w*' },
+  { label: 'ongoing dev work', needs: ['git', 'gh', 'skills'],
+    keys: 'automat\\w*|dev|refactor\\w*|deploy\\w*|ship|tests?|testing|debug\\w*|bugs?|repo(sitory)?s?|codebase|pull requests?|collaborat\\w*' },
+  { label: 'writing documents', needs: ['pandoc'],
+    keys: 'reports?|essays?|thesis|dissertation|papers?|rubrics?|resume|cv|letters?|pdfs?|word|docx?|documents?|notes|lessons?|quiz(zes)?|worksheets?|blogs?|articles?|books?|proposals?|grad(e|es|ing)|teach(er|ing|es)?|research|writ(e|ing)|literature|handouts?|notices?|newsletters?' },
+];
+
+const GENERAL = {
+  firstWin: 'Before doing anything, ask me up to three questions to understand where I am starting from. Then break my goal into small steps, tell me which ones you can do in this folder, and do the first one with me, explaining as you go.',
+  tips: ['Describe the result you want, not the steps. Then ask the agent for a plan before it starts.',
+         'Start a fresh session for each task. Long sessions cost more and drift.',
+         'If an answer looks wrong, say so and ask it to check itself. It often catches its own mistake.'],
+};
 
 const AGENTS = {
   claude: { name: 'Claude Code', check: 'claude', cmd: 'claude', ctxFile: 'CLAUDE.md',
@@ -60,14 +74,25 @@ const AGENTS = {
 const WINGET = id => 'winget install --id ' + id + ' -e --accept-source-agreements --accept-package-agreements';
 
 // ---------- logic ----------
-function matchGoal(text) {
-  const t = (text || '').toLowerCase();
-  let best = null, score = 0;
-  for (const g of GOALS) {
-    const s = g.keys.reduce((n, k) => n + (t.includes(k) ? 1 : 0), 0);
-    if (s > score) { best = g; score = s; }
-  }
-  return best;
+const has = (t, frag) => new RegExp('(?:^|[^a-z0-9])(?:' + frag + ')(?![a-z0-9])').test(t);
+
+// Any goal works. The closest archetype only shapes the first task and tips; the tools come from
+// what the words imply. Nothing recognised -> a general setup built on the user's own words.
+function understand(text) {
+  const raw = (text || '').replace(/\s+/g, ' ').trim(), t = raw.toLowerCase();
+  let arch = null, score = 0;
+  for (const g of GOALS) { const s = g.keys.filter(k => has(t, k)).length; if (s > score) { arch = g; score = s; } }
+  const caps = CAPS.filter(c => has(t, c.keys));
+  const needs = [...new Set(caps.flatMap(c => c.needs))];
+  if (!caps.length) needs.push('git');
+  const isExample = GOALS.some(g => g.label.toLowerCase() === t);
+  const mine = raw && !isExample ? 'My goal: "' + raw.replace(/"/g, "'").replace(/[.!?\s]+$/, '') + '". ' : '';
+  const capNames = caps.map(c => c.label).join(', ');
+  const read = arch ? 'Sounds like: ' + arch.label.toLowerCase() + '.' + (capNames ? ' I also picked up: ' + capNames + '.' : '')
+    : capNames ? 'I picked up: ' + capNames + '.'
+    : 'That is a new one for me, so you get the general setup. Your exact words go into the agent\'s rules and its first task.';
+  return { id: arch ? arch.id : 'custom', label: raw || 'A general AI agent setup', needs, read, known: !!(arch || caps.length),
+           firstWin: mine + (arch || GENERAL).firstWin, tips: (arch || GENERAL).tips };
 }
 
 function localModel(ram) {
@@ -78,7 +103,7 @@ function localModel(ram) {
 }
 
 function recommend(ctx) {
-  const goal = GOALS.find(g => g.id === ctx.goalId) || GOALS[0];
+  const goal = understand(ctx.goalText || (GOALS.find(g => g.id === ctx.goalId) || {}).label);
   const subs = ctx.subs || [];
   const steps = [], skipped = [];
   const add = (kind, name, why, check, run, extra) => steps.push(Object.assign({ kind, name, why, check, run }, extra));
@@ -135,7 +160,7 @@ function recommend(ctx) {
   const files = [];
   const rules = [
     '# AgentReady workspace', '',
-    'Goal: ' + (ctx.goalText || goal.label), '',
+    'Goal: ' + goal.label, '',
     '## How to work with me',
     ctx.skill === 'new' ? '- I am new to this. Explain every command before running it, in plain language.' : '- Keep explanations short unless I ask.',
     ctx.mode === 'learn' ? '- Ask before each change and tell me why it is needed.' : '- Work through tasks end to end, then summarise what changed.',
@@ -189,7 +214,7 @@ function safety(agentId, ctx, thirdParty) {
 }
 
 function buildManifest(plan, ctx) {
-  return { tool: 'AgentReady', version: 1, goal: ctx.goalText || plan.goal.label, mode: ctx.mode,
+  return { tool: 'AgentReady', version: 1, goal: plan.goal.label, mode: ctx.mode,
            workspace: '~/AgentReady-Workspace', agentCommand: plan.agent.cmd,
            steps: plan.steps.map(s => ({ name: s.name, why: s.why, check: s.check || '', run: s.run })),
            files: plan.files.map(f => ({ path: f.path, content: f.content })) };
@@ -257,13 +282,13 @@ function buildPs1(manifest) {
   ].join('\r\n');
 }
 
-if (typeof module !== 'undefined') module.exports = { GOALS, matchGoal, recommend, buildManifest, buildPs1 };
+if (typeof module !== 'undefined') module.exports = { GOALS, understand, recommend, buildManifest, buildPs1 };
 
 // ---------- UI ----------
 if (typeof document !== 'undefined') (function () {
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const S = { step: 0, goalId: null, skill: 'new', subs: [], mode: 'learn', previewed: false };
+  const S = { step: 0, skill: 'new', subs: [], mode: 'learn', previewed: false };
 
   $('#itch-rows').innerHTML = ITCHES.map(r =>
     '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td><td><span class="paws" aria-label="' + r[2] + ' of 5">' +
@@ -271,20 +296,17 @@ if (typeof document !== 'undefined') (function () {
 
   // goal step
   const goalEl = $('#goal'), matchEl = $('#goal-match');
-  $('#goal-chips').innerHTML = GOALS.map(g => '<button data-goal="' + g.id + '">' + esc(g.label) + '</button>').join('');
-  function setGoal(id, fromChip) {
-    S.goalId = id;
-    $$('#goal-chips button').forEach(b => b.classList.toggle('on', b.dataset.goal === id));
-    const g = GOALS.find(x => x.id === id);
-    matchEl.textContent = g ? (fromChip ? '' : 'Sounds like: ' + g.label) : '';
+  $('#goal-chips').innerHTML = GOALS.map(g => '<button>' + esc(g.label) + '</button>').join('');
+  function readGoal() {
+    const v = goalEl.value.trim();
+    $$('#goal-chips button').forEach(b => b.classList.toggle('on', b.textContent === v));
+    matchEl.textContent = v ? understand(v).read : '';
   }
   $('#goal-chips').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    const g = GOALS.find(x => x.id === b.dataset.goal);
-    if (!goalEl.value.trim() || GOALS.some(x => x.label === goalEl.value)) goalEl.value = g.label;
-    setGoal(g.id, true);
+    goalEl.value = b.textContent; readGoal();
   });
-  goalEl.addEventListener('input', () => { const g = matchGoal(goalEl.value); if (g) setGoal(g.id); });
+  goalEl.addEventListener('input', readGoal);
 
   // chip groups
   $$('.chips[data-group]').forEach(group => {
@@ -316,7 +338,7 @@ if (typeof document !== 'undefined') (function () {
   $('#hours').addEventListener('input', hoursOut); hoursOut();
 
   function ctx() {
-    return { goalId: S.goalId, goalText: goalEl.value.trim(), skill: S.skill, subs: S.subs, mode: S.mode,
+    return { goalText: goalEl.value.trim(), skill: S.skill, subs: S.subs, mode: S.mode,
              os: $('#os').value, ram: +$('#ram').value, net: $('#net').value, hours: +$('#hours').value,
              guard: { destructive: $('#g-destructive').checked, secrets: $('#g-secrets').checked, thirdparty: $('#g-thirdparty').checked } };
   }
@@ -324,9 +346,9 @@ if (typeof document !== 'undefined') (function () {
   // navigation
   const LAST = 4;
   function go(n) {
-    if (n > 0 && !S.goalId) {
-      const g = matchGoal(goalEl.value);
-      if (g) setGoal(g.id); else { matchEl.textContent = 'Pick the closest goal below so I know what to set up.'; pup.say('Pick the closest goal chip and I can take it from there.', true); return; }
+    if (n > 0 && !goalEl.value.trim()) {
+      matchEl.textContent = 'Type what you want to get done, in any words, or tap an example.';
+      pup.say('Tell me the goal first. Any words work.', true); goalEl.focus(); return;
     }
     S.step = n;
     $$('.pane').forEach(p => p.classList.toggle('on', +p.dataset.pane === n));
@@ -349,7 +371,7 @@ if (typeof document !== 'undefined') (function () {
     const win = c.os === 'windows';
     $('#result').innerHTML =
       '<p class="verdict">' + plan.steps.length + ' things to set up. ' + plan.skipped.length + ' left out on purpose.</p>' +
-      '<p class="note">For: <b>' + esc(man.goal) + '</b></p>' +
+      '<p class="note">For: <b>' + esc(man.goal) + '</b><br>' + esc(plan.goal.read) + '</p>' +
       '<div class="res-grid"><div>' +
         '<div class="card"><h4>Your stack, and why each piece is there</h4>' +
           plan.steps.map(s => '<div class="item"><span class="k">' + s.kind + '</span><b>' + esc(s.name) + '</b><p>' + esc(s.why) + '</p></div>').join('') + '</div>' +
