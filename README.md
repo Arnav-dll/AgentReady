@@ -40,7 +40,7 @@ Powerful AI agents exist. Most people still can't use them, because the hard par
 - **Fits your machine and wallet.** It uses the subscription you already have, and adds a small local model only when your internet or free tier can't carry you.
 - **Minimum stack.** Every item comes with a reason. It also lists what it left out, and why.
 - **Safe by default.** Guardrail rules, a dry run and a safety score before anything touches your laptop.
-- **A first win.** A ready-to-paste first task for your goal, so you never face an empty prompt.
+- **A first win.** A ready-to-paste first task for your goal, so you never face an empty prompt, plus three tips for what to ask next.
 
 ## How it works
 
