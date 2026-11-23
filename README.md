@@ -41,7 +41,6 @@ Powerful AI agents exist. Most people still can't use them, because the hard par
 - **Minimum stack.** Every item comes with a reason. It also lists what it left out, and why.
 - **Safe by default.** Guardrail rules, a dry run and a safety score before anything touches your laptop.
 - **A first win.** A ready-to-paste first task for your goal, so you never face an empty prompt.
-- **A pup, not a popup.** A small companion in the corner gives one tip at a time, fades on its own, and can be told to shh.
 
 ## How it works
 
@@ -141,9 +140,7 @@ flowchart LR
         UI["index.html + styles.css<br/>matte paper UI, no framework"]
         LOGIC["app.js<br/>goal reader · recommender<br/>safety score · cost estimate"]
         GEN["Manifest + PowerShell generator"]
-        PUP["Companion pup<br/>inline SVG + CSS animation"]
         UI --> LOGIC --> GEN
-        LOGIC --> PUP
     end
 
     subgraph Output["What you download"]
@@ -173,22 +170,6 @@ flowchart LR
 | Installer | Generated PowerShell | Nothing to trust but a script you can read |
 | Packages | winget and vendor npm packages | Official sources only |
 | Local AI | Ollama, model sized to RAM | Keeps low-spec and offline users working |
-
-## The pup
-
-```mermaid
-stateDiagram-v2
-    [*] --> Quiet
-    Quiet --> Tip: new wizard step, at most one every 20 s
-    Quiet --> Tip: you tap the pup
-    Tip --> Quiet: fades after 9 s
-    Tip --> Tip: Another tip
-    Tip --> Snoozed: Shh for 10 min
-    Snoozed --> Tip: you tap the pup
-    Snoozed --> Quiet: 10 min pass
-```
-
-It never opens a modal, never takes focus, and only the pup itself accepts clicks.
 
 ## Safety score
 
@@ -231,9 +212,9 @@ Tools that are already installed are skipped, and existing workspace files are n
 
 ```text
 AgentReady/
-├── index.html      # landing page, wizard and pup markup
+├── index.html      # landing page and wizard
 ├── styles.css      # matte paper design system and motion
-├── app.js          # goals, recommender, scoring, script generator, pup
+├── app.js          # goal reader, recommender, scoring, script generator
 └── docs/
     └── hero.png
 ```
@@ -242,7 +223,6 @@ AgentReady/
 
 - The goal reader and recommender are **rule-based**, not an ML model. Any goal is accepted, but the reader only recognises English keywords: a goal in another language, or one outside code, documents and data, gets the general setup with your words passed to the agent.
 - The installer script is **Windows only**. macOS and Linux users get the manifest as a checklist.
-- The pup lives **inside the page**. A desktop companion is on the roadmap.
 - The cost figure is a **rough estimate**. Provider limits change.
 - The community skill pack step is **untested end to end**, and no full install has been run on a clean machine: the script has only been verified with `-DryRun`.
 
@@ -250,8 +230,8 @@ AgentReady/
 
 ```mermaid
 flowchart LR
-    N["Now<br/>rule-based wizard, any goal<br/>Windows installer<br/>in-page pup"] --> A["Next<br/>LLM goal understanding<br/>macOS and Linux scripts"]
-    A --> B["Then<br/>desktop pup that notices<br/>what you do by hand"]
+    N["Now<br/>rule-based wizard, any goal<br/>Windows installer"] --> A["Next<br/>LLM goal understanding<br/>macOS and Linux scripts"]
+    A --> B["Then<br/>desktop companion that notices<br/>what you do by hand"]
     B --> C["Later<br/>sandbox-tested catalog<br/>post-install red-team check"]
 ```
 

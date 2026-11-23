@@ -158,7 +158,7 @@ function recommend(ctx) {
   }
 
   skipped.push({ name: 'A second AI subscription', why: 'It would add cost, not capability, for this goal.' });
-  skipped.push({ name: 'MCP servers', why: 'None are needed on day one. The pup suggests one when you actually hit the need.' });
+  skipped.push({ name: 'MCP servers', why: 'None are needed on day one. Add one when you actually hit the need.' });
 
   // workspace files
   const files = [];
@@ -292,7 +292,7 @@ if (typeof module !== 'undefined') module.exports = { GOALS, understand, recomme
 if (typeof document !== 'undefined') (function () {
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const S = { step: 0, skill: 'new', subs: [], mode: 'learn', previewed: false };
+  const S = { step: 0, skill: 'new', subs: [], mode: 'learn' };
 
   $('#itch-rows').innerHTML = ITCHES.map(r =>
     '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td><td><span class="paws" aria-label="' + r[2] + ' of 5">' +
@@ -352,7 +352,7 @@ if (typeof document !== 'undefined') (function () {
   function go(n) {
     if (n > 0 && !goalEl.value.trim()) {
       matchEl.textContent = 'Type what you want to get done, in any words, or tap an example.';
-      pup.say('Tell me the goal first. Any words work.', true); goalEl.focus(); return;
+      goalEl.focus(); return;
     }
     S.step = n;
     $$('.pane').forEach(p => p.classList.toggle('on', +p.dataset.pane === n));
@@ -361,7 +361,6 @@ if (typeof document !== 'undefined') (function () {
     $('#back').hidden = n === 0;
     $('#next').textContent = n === LAST - 1 ? 'Build my setup' : n === LAST ? 'Start over' : 'Next';
     if (n === LAST) render();
-    pup.onStep(n);
     $('#wizard').scrollIntoView({ block: 'start' });
   }
   $('#next').addEventListener('click', () => go(S.step === LAST ? 0 : S.step + 1));
@@ -371,7 +370,7 @@ if (typeof document !== 'undefined') (function () {
   let current = null;
   function render() {
     const c = ctx(), plan = recommend(c), man = buildManifest(plan, c);
-    current = { c, plan, man }; S.previewed = false;
+    current = { c, plan, man };
     const sc = plan.safety.score, col = sc >= 85 ? 'var(--ok)' : sc >= 65 ? 'var(--warn)' : 'var(--bad)';
     const win = c.os === 'windows';
     $('#result').innerHTML =
@@ -398,10 +397,9 @@ if (typeof document !== 'undefined') (function () {
       '<p class="note">Run that first from your Downloads folder to see every step without changing anything. Drop <code>-DryRun</code> to install.</p>' +
       '<div class="term" id="term" hidden></div>';
     requestAnimationFrame(() => requestAnimationFrame(() => { const r = $('.ring'); if (r) r.style.setProperty('--v', sc); }));
-    $('#dl-ps1').onclick = () => { download('agentready-setup.ps1', buildPs1(man)); pup.say(S.previewed ? 'Good. Run it with -DryRun first, then for real.' : 'Downloaded. Run it with -DryRun first so nothing surprises you.', true); };
+    $('#dl-ps1').onclick = () => download('agentready-setup.ps1', buildPs1(man));
     $('#dl-json').onclick = () => download('agentready-setup.json', JSON.stringify(man, null, 2));
     $('#preview').onclick = () => {
-      S.previewed = true;
       const t = $('#term'), n = man.steps.length;
       t.hidden = false;
       t.innerHTML = '<span class="y">DRY RUN: nothing will be changed.</span>\n' +
@@ -440,36 +438,4 @@ if (typeof document !== 'undefined') (function () {
       if (!raf) raf = requestAnimationFrame(tick);
     }, { passive: true });
   })();
-
-  // ---------- pup: quiet, rate-limited, never modal ----------
-  const pup = (function () {
-    const bubble = $('#bubble'), text = $('#bubble-text');
-    let hideT = null, last = 0, snoozeUntil = 0, tipI = 0;
-    const GAP = 20000, SHOW = 9000;
-    const STEP = [
-      'Start with what you want, not which tool. Any words work.',
-      'Tell me what you already pay for. I will use that before anything new.',
-      'Be honest about RAM. A plan that fits your laptop beats a fancy one that freezes it.',
-      'Learn mode asks before each step. It is slower, and you will understand your own setup.',
-      'Next helpful thing: tap "Preview dry run" before you download.',
-    ];
-    function hide() { bubble.classList.add('out'); setTimeout(() => { bubble.hidden = true; bubble.classList.remove('out'); }, 220); }
-    function say(msg, force) {
-      const now = Date.now();
-      if (!force && (now < snoozeUntil || now - last < GAP)) return;   // unsolicited nudges are rate-limited
-      last = now; text.textContent = msg; bubble.hidden = false; bubble.classList.remove('out');
-      clearTimeout(hideT); hideT = setTimeout(hide, SHOW);
-    }
-    function tip() {
-      const tips = current ? current.plan.goal.tips : STEP;
-      say(S.step === LAST && current ? tips[tipI++ % tips.length] : STEP[S.step], true);
-    }
-    $('#pup-btn').addEventListener('click', () => { if (bubble.hidden) tip(); else { clearTimeout(hideT); hide(); } });
-    $('#pup-more').addEventListener('click', tip);
-    $('#pup-snooze').addEventListener('click', () => { snoozeUntil = Date.now() + 600000; clearTimeout(hideT); hide(); });
-    bubble.addEventListener('mouseenter', () => clearTimeout(hideT));
-    bubble.addEventListener('mouseleave', () => { hideT = setTimeout(hide, 2500); });
-    return { say, onStep: n => say(STEP[n]) };
-  })();
-  setTimeout(() => pup.say('Hi! I am the AgentReady pup. Tap me any time for a tip. I will stay out of your way.'), 2500);
 })();
