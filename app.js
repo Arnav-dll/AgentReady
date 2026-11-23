@@ -357,6 +357,7 @@ if (typeof document !== 'undefined') (function () {
     S.step = n;
     $$('.pane').forEach(p => p.classList.toggle('on', +p.dataset.pane === n));
     $$('#steps li').forEach((li, i) => { li.classList.toggle('on', i === n); li.classList.toggle('done', i < n); });
+    $('#steps').style.setProperty('--i', n);
     $('#back').hidden = n === 0;
     $('#next').textContent = n === LAST - 1 ? 'Build my setup' : n === LAST ? 'Start over' : 'Next';
     if (n === LAST) render();
@@ -378,11 +379,11 @@ if (typeof document !== 'undefined') (function () {
       '<p class="note">For: <b>' + esc(man.goal) + '</b><br>' + esc(plan.goal.read) + '</p>' +
       '<div class="res-grid"><div>' +
         '<div class="card"><h4>Your stack, and why each piece is there</h4>' +
-          plan.steps.map(s => '<div class="item"><span class="k">' + s.kind + '</span><b>' + esc(s.name) + '</b><p>' + esc(s.why) + '</p></div>').join('') + '</div>' +
+          plan.steps.map((s, i) => '<div class="item" style="--i:' + i + '"><span class="k">' + s.kind + '</span><b>' + esc(s.name) + '</b><p>' + esc(s.why) + '</p></div>').join('') + '</div>' +
         '<div class="card" style="margin-top:16px"><h4>Left out on purpose</h4>' +
-          plan.skipped.map(s => '<div class="item skip"><span class="k">skip</span><b>' + esc(s.name) + '</b><p>' + esc(s.why) + '</p></div>').join('') + '</div>' +
+          plan.skipped.map((s, i) => '<div class="item skip" style="--i:' + (i + plan.steps.length) + '"><span class="k">skip</span><b>' + esc(s.name) + '</b><p>' + esc(s.why) + '</p></div>').join('') + '</div>' +
       '</div><div class="side">' +
-        '<div class="card"><h4>Safety score</h4><div class="ring" style="--v:' + sc + ';--c:' + col + '"><b>' + sc + '</b></div>' +
+        '<div class="card"><h4>Safety score</h4><div class="ring" style="--c:' + col + '"><b>' + sc + '</b></div>' +
           '<ul class="checks">' + plan.safety.checks.map(k => '<li class="' + (k.ok ? '' : 'no') + '">' + esc(k.text) + '</li>').join('') + '</ul>' +
           '<p class="fine">A check of this setup\'s settings, not a penetration test.</p></div>' +
         '<div class="card cost"><h4>Cost</h4><b>₹0 new spend</b><p>' + esc(plan.cost.text) + '</p><p class="fine">A rough estimate. Provider limits change.</p></div>' +
@@ -396,6 +397,7 @@ if (typeof document !== 'undefined') (function () {
       '<div class="runline">powershell -ExecutionPolicy Bypass -File .\\agentready-setup.ps1 -DryRun</div>' +
       '<p class="note">Run that first from your Downloads folder to see every step without changing anything. Drop <code>-DryRun</code> to install.</p>' +
       '<div class="term" id="term" hidden></div>';
+    requestAnimationFrame(() => requestAnimationFrame(() => { const r = $('.ring'); if (r) r.style.setProperty('--v', sc); }));
     $('#dl-ps1').onclick = () => { download('agentready-setup.ps1', buildPs1(man)); pup.say(S.previewed ? 'Good. Run it with -DryRun first, then for real.' : 'Downloaded. Run it with -DryRun first so nothing surprises you.', true); };
     $('#dl-json').onclick = () => download('agentready-setup.json', JSON.stringify(man, null, 2));
     $('#preview').onclick = () => {
@@ -416,6 +418,29 @@ if (typeof document !== 'undefined') (function () {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
+  // ---------- motion: reveal on scroll, and one patch of pigment that trails the cursor ----------
+  (function motion() {
+    const groups = ['.stats li', '#itches h2, #itches .sub, #itches .table-wrap', '#how h2', '.how article', '#wizard h2, #wizard .sub, #wizard .wizard'];
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }),
+        { rootMargin: '0px 0px -8% 0px' });
+      groups.forEach(sel => $$(sel).forEach((el, i) => { el.style.setProperty('--i', i); el.classList.add('reveal'); io.observe(el); }));
+    }
+    const glow = $('.sky b');
+    if (!glow || !matchMedia('(hover: hover) and (pointer: fine)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let x = 0, y = 0, tx = 0, ty = 0, raf = 0, seen = false;
+    function tick() {
+      x += (tx - x) * 0.07; y += (ty - y) * 0.07;                     // eased follow, so it has weight
+      glow.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,0)';
+      raf = Math.abs(tx - x) + Math.abs(ty - y) > 0.5 ? requestAnimationFrame(tick) : 0;   // sleeps when settled
+    }
+    addEventListener('pointermove', e => {
+      tx = e.clientX; ty = e.clientY;
+      if (!seen) { seen = true; x = tx; y = ty; glow.classList.add('live'); }
+      if (!raf) raf = requestAnimationFrame(tick);
+    }, { passive: true });
+  })();
+
   // ---------- pup: quiet, rate-limited, never modal ----------
   const pup = (function () {
     const bubble = $('#bubble'), text = $('#bubble-text');
@@ -428,7 +453,7 @@ if (typeof document !== 'undefined') (function () {
       'Learn mode asks before each step. It is slower, and you will understand your own setup.',
       'Next helpful thing: tap "Preview dry run" before you download.',
     ];
-    function hide() { bubble.classList.add('out'); setTimeout(() => { bubble.hidden = true; bubble.classList.remove('out'); }, 400); }
+    function hide() { bubble.classList.add('out'); setTimeout(() => { bubble.hidden = true; bubble.classList.remove('out'); }, 220); }
     function say(msg, force) {
       const now = Date.now();
       if (!force && (now < snoozeUntil || now - last < GAP)) return;   // unsolicited nudges are rate-limited
