@@ -36,7 +36,7 @@ Powerful AI agents exist. Most people still can't use them, because the hard par
 
 ## What AgentReady does
 
-- **Goal first.** You say *"land a backend internship"* or *"grade 60 papers by Friday"*, not which tool you want.
+- **Goal first, in any words.** You say *"land a backend internship"*, *"grade 60 papers by Friday"* or *"keep my shop's accounts in a spreadsheet"*, not which tool you want. Nothing is rejected: a goal it does not recognise still gets a general setup built around your exact words.
 - **Fits your machine and wallet.** It uses the subscription you already have, and adds a small local model only when your internet or free tier can't carry you.
 - **Minimum stack.** Every item comes with a reason. It also lists what it left out, and why.
 - **Safe by default.** Guardrail rules, a dry run and a safety score before anything touches your laptop.
@@ -47,18 +47,17 @@ Powerful AI agents exist. Most people still can't use them, because the hard par
 
 ```mermaid
 flowchart TD
-    A([You state a goal]) --> B{Goal matcher}
-    B -->|career| G1[Internship or job]
-    B -->|study| G2[Assignments and learning]
-    B -->|teach| G3[Teaching and grading]
-    B -->|automate| G4[Dev automation]
-    B -->|research| G5[Research and writing]
-    G1 & G2 & G3 & G4 & G5 --> C[Capabilities needed]
+    A([You state a goal, in any words]) --> B{Goal reader}
+    B -->|what the words imply| C[Capabilities needed:<br/>code, sharing work, documents, data]
+    B -->|closest of 5 archetypes, if any| T[First task and tips]
+    B -->|nothing recognised| G[General setup,<br/>your words become the first task]
+    G --> C
 
     D([What you already pay for]) --> R
     E([Machine: OS, RAM, internet, daily use]) --> R
     F([Mode and guardrails]) --> R
     C --> R{{Recommender}}
+    T --> W
 
     R --> S[Minimal stack with a reason per item]
     R --> K[Left out on purpose]
@@ -94,6 +93,13 @@ flowchart TD
     NL & SK & L1 & L2 & L3 --> Q5{Terminal comfort}
     Q5 -->|new or some| VS[Add VS Code]
     Q5 -->|pro| NV[Keep your own editor]
+
+    VS & NV --> Q6{What the goal's words imply}
+    Q6 -->|code| T1[Git]
+    Q6 -->|sharing work, dev work| T2[Git + GitHub CLI]
+    Q6 -->|documents| T3[Pandoc]
+    Q6 -->|data| T4[Python]
+    Q6 -->|nothing recognised| T5[Git, as an undo net]
 ```
 
 ## What the installer does
@@ -132,8 +138,8 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     subgraph Browser["Runs entirely in your browser"]
-        UI["index.html + styles.css<br/>liquid-glass UI, no framework"]
-        LOGIC["app.js<br/>goal matcher · recommender<br/>safety score · cost estimate"]
+        UI["index.html + styles.css<br/>matte paper UI, no framework"]
+        LOGIC["app.js<br/>goal reader · recommender<br/>safety score · cost estimate"]
         GEN["Manifest + PowerShell generator"]
         PUP["Companion pup<br/>inline SVG + CSS animation"]
         UI --> LOGIC --> GEN
@@ -146,7 +152,7 @@ flowchart LR
     end
 
     subgraph Laptop["Installed on your laptop"]
-        WG["winget<br/>Git · Node.js · VS Code · GitHub CLI · Pandoc · Ollama"]
+        WG["winget<br/>Git · Node.js · VS Code · GitHub CLI · Pandoc · Python · Ollama"]
         NPM["npm<br/>Claude Code · Codex CLI · Gemini CLI"]
         WS["~/AgentReady-Workspace<br/>rules file · .claude/settings.json · FIRST_TASK.md"]
     end
@@ -161,7 +167,8 @@ flowchart LR
 | Layer | Choice | Why |
 |---|---|---|
 | UI | HTML, CSS, vanilla JS | No build step. Open the file and it works, even offline |
-| Look | `backdrop-filter` glass over a soft colour field | Apple-style liquid glass, with a reduced-motion fallback |
+| Look | Flat matte surfaces with an inline SVG paper grain over a soft colour field | No images or fonts to download; cheap to paint on a budget laptop |
+| Motion | CSS transitions on `transform` and `opacity`, one `IntersectionObserver` | Stays smooth on weak hardware; reduced-motion keeps the fades and drops the movement |
 | Logic | Plain rule functions in `app.js` | Easy to read, easy to test in Node |
 | Installer | Generated PowerShell | Nothing to trust but a script you can read |
 | Packages | winget and vendor npm packages | Official sources only |
@@ -225,7 +232,7 @@ Tools that are already installed are skipped, and existing workspace files are n
 ```text
 AgentReady/
 ├── index.html      # landing page, wizard and pup markup
-├── styles.css      # liquid-glass design system
+├── styles.css      # matte paper design system and motion
 ├── app.js          # goals, recommender, scoring, script generator, pup
 └── docs/
     └── hero.png
@@ -233,17 +240,17 @@ AgentReady/
 
 ## Honest limits
 
-- The goal matcher and recommender are **rule-based**, not an ML model.
+- The goal reader and recommender are **rule-based**, not an ML model. Any goal is accepted, but the reader only recognises English keywords: a goal in another language, or one outside code, documents and data, gets the general setup with your words passed to the agent.
 - The installer script is **Windows only**. macOS and Linux users get the manifest as a checklist.
 - The pup lives **inside the page**. A desktop companion is on the roadmap.
 - The cost figure is a **rough estimate**. Provider limits change.
-- The community skill pack step is **untested end to end**.
+- The community skill pack step is **untested end to end**, and no full install has been run on a clean machine: the script has only been verified with `-DryRun`.
 
 ## Roadmap
 
 ```mermaid
 flowchart LR
-    N["Now<br/>rule-based wizard<br/>Windows installer<br/>in-page pup"] --> A["Next<br/>LLM goal understanding<br/>macOS and Linux scripts"]
+    N["Now<br/>rule-based wizard, any goal<br/>Windows installer<br/>in-page pup"] --> A["Next<br/>LLM goal understanding<br/>macOS and Linux scripts"]
     A --> B["Then<br/>desktop pup that notices<br/>what you do by hand"]
     B --> C["Later<br/>sandbox-tested catalog<br/>post-install red-team check"]
 ```
