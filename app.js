@@ -225,7 +225,7 @@ function buildManifest(plan, ctx) {
 }
 
 function buildPs1(manifest) {
-  const json = JSON.stringify(manifest).replace(/\r?\n/g, ' ');
+  const json = JSON.stringify(manifest).replace(/[\u007f-￿]/g, c => '\\u' + ('000' + c.charCodeAt(0).toString(16)).slice(-4));
   return [
     '# AgentReady setup script. Read it before you run it.',
     '#   Preview only:  powershell -ExecutionPolicy Bypass -File .\\agentready-setup.ps1 -DryRun',
