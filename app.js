@@ -53,6 +53,8 @@ const CAPS = [
     keys: 'automat\\w*|dev|refactor\\w*|deploy\\w*|ship|tests?|testing|debug\\w*|bugs?|repo(sitory)?s?|codebase|pull requests?|collaborat\\w*' },
   { label: 'writing documents', needs: ['pandoc'],
     keys: 'reports?|essays?|thesis|dissertation|papers?|rubrics?|resume|cv|letters?|pdfs?|word|docx?|documents?|notes|lessons?|quiz(zes)?|worksheets?|blogs?|articles?|books?|proposals?|grad(e|es|ing)|teach(er|ing|es)?|research|writ(e|ing)|literature|handouts?|notices?|newsletters?' },
+  { label: 'working with data', needs: ['python'],
+    keys: 'excel|csv|spreadsheets?|sheets?|datasets?|data (analysis|science|entry|sets?)|analy[sz]\\w*|charts?|graphs?|statistics|stats|marks|budgets?|sales|expenses|invoices?|attendance|inventory|accounts?' },
 ];
 
 const GENERAL = {
@@ -143,6 +145,8 @@ function recommend(ctx) {
     add('tool', 'GitHub CLI', 'Lets your agent publish projects and open pull requests, which is what people reviewing your work look at.', 'gh', WINGET('GitHub.cli'));
   if (goal.needs.includes('pandoc'))
     add('tool', 'Pandoc', 'Turns the agent\'s text into Word or PDF files you can hand out or submit.', 'pandoc', WINGET('JohnMacFarlane.Pandoc'));
+  if (goal.needs.includes('python'))
+    add('tool', 'Python', 'Your goal involves data. With Python the agent can read spreadsheets and CSV files and draw charts, instead of guessing at numbers.', 'py', WINGET('Python.Python.3.12'));
 
   let thirdParty = false;
   if (goal.needs.includes('skills') && agentId === 'claude') {
