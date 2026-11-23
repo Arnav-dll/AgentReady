@@ -67,7 +67,7 @@ flowchart TD
 
     S --> M[(Manifest JSON)]
     M --> P[Dry-run preview in the page]
-    M --> I[Installer script:<br/>.ps1 on Windows, .sh on macOS and Linux]
+    M --> I[Installer script:<br/>.cmd on Windows, .sh on macOS and Linux]
     I --> W[Workspace: rules file, guardrails, first task]
     W --> Z([Your first win])
 ```
@@ -107,7 +107,7 @@ flowchart TD
 
 ## What the installer does
 
-The page gives you the script for your system: `agentready-setup.ps1` on Windows, and one `agentready-setup.sh` that works on both macOS (Homebrew) and Linux (apt, dnf, pacman or zypper, found when it runs). The flow is the same on all three.
+The page gives you the script for your system: `agentready-setup.cmd` on Windows (a menu plus the PowerShell script, in one file), and one `agentready-setup.sh` that works on both macOS (Homebrew) and Linux (apt, dnf, pacman or zypper, found when it runs). The flow is the same on all three.
 
 ```mermaid
 sequenceDiagram
@@ -151,7 +151,7 @@ flowchart LR
 
     subgraph Output["What you download"]
         JSON[("agentready-setup.json")]
-        PS1["agentready-setup.ps1 (Windows)<br/>agentready-setup.sh (macOS, Linux)"]
+        PS1["agentready-setup.cmd (Windows)<br/>agentready-setup.sh (macOS, Linux)"]
     end
 
     subgraph Laptop["Installed on your laptop"]
@@ -200,18 +200,15 @@ cd AgentReady
 # open index.html in a browser. That's it.
 ```
 
-After the wizard, from the folder where the script downloaded:
+After the wizard, on Windows: double-click the downloaded `agentready-setup.cmd` and type 1 for a preview that changes nothing. Or from a terminal in that folder:
 
 ```powershell
-# See every step. Changes nothing.
-powershell -ExecutionPolicy Bypass -File .\agentready-setup.ps1 -DryRun
-
-# Install, asking before each step
-powershell -ExecutionPolicy Bypass -File .\agentready-setup.ps1 -Learn
-
-# Install everything
-powershell -ExecutionPolicy Bypass -File .\agentready-setup.ps1 -Auto
+.agentready-setup.cmd -DryRun   # see every step, changes nothing
+.agentready-setup.cmd -Learn    # install, asking before each step
+.agentready-setup.cmd -Auto     # install everything
 ```
+
+It is a `.cmd` and not a `.ps1` because Windows blocks double-clicked PowerShell scripts by default: the window flashes and closes. The file is a short batch menu followed by the same readable PowerShell script.
 
 On macOS or Linux:
 
@@ -241,7 +238,7 @@ AgentReady/
 - **Offline mode is chat-only.** No agent is installed, so the model cannot create files or run tools.
 - The local model is always a Qwen coder model, also for goals that are not about code.
 - The cost figure is a **rough estimate**. Provider limits change.
-- The community skill pack step is **untested end to end**, and no full install has been run on a clean machine: the Windows script has only been verified with `-DryRun`, and the winget repair only as a simulated dry run.
+- The community skill pack step is **untested end to end**, and no full install has been run on a clean machine: the Windows script has only been verified as a dry run (by argument and through its menu), and the winget repair only as a simulated dry run.
 
 ## Roadmap
 

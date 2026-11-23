@@ -580,16 +580,61 @@ function buildSh(mac, linux) {
   ]).join('\n');
 }
 
-// The right installer for an operating system: PowerShell on Windows, one shell script for macOS and Linux.
+// Windows blocks double-clicked .ps1 files by default ("running scripts is disabled"), and the window closes before
+// anyone can read why. So the download is a .cmd: a few lines of batch that show a menu, then run the PowerShell
+// script that follows them in the same file. Still one file, still readable top to bottom.
+function buildCmd(ps1) {
+  return [
+    '@echo off',
+    'rem AgentReady setup for Windows. Read it before you run it: the PowerShell script starts at the marker line below.',
+    'rem Double-click this file for a menu, or run it from a terminal:  agentready-setup.cmd -DryRun   (or -Learn, or -Auto)',
+    'setlocal',
+    'title AgentReady setup',
+    'set "AR_SELF=%~f0"',
+    'set "AR_PS1=%TEMP%\\agentready-setup-%RANDOM%.ps1"',
+    'set "AR_ARGS=%*"',
+    'powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = [IO.File]::ReadAllText($env:AR_SELF); $i = $t.IndexOf([char]35 + \'AGENTREADY-POWERSHELL-PART\'); [IO.File]::WriteAllText($env:AR_PS1, $t.Substring($i), (New-Object Text.UTF8Encoding($true)))"',
+    'if not exist "%AR_PS1%" (echo Could not start PowerShell. Nothing was changed. & goto end)',
+    'if not "%~1"=="" goto run',
+    ':menu',
+    'echo.',
+    'echo   AgentReady setup',
+    'echo.',
+    'echo   1. Preview only: show every step, change nothing',
+    'echo   2. Install, asking me before each step',
+    'echo   3. Install everything',
+    'echo   4. Quit',
+    'echo.',
+    'choice /c 1234 /n /m "Type 1, 2, 3 or 4: "',
+    'if errorlevel 4 goto end',
+    'set "AR_ARGS=-DryRun"',
+    'if errorlevel 2 set "AR_ARGS=-Learn"',
+    'if errorlevel 3 set "AR_ARGS=-Auto"',
+    'powershell -NoProfile -ExecutionPolicy Bypass -File "%AR_PS1%" %AR_ARGS%',
+    'goto menu',
+    ':run',
+    'powershell -NoProfile -ExecutionPolicy Bypass -File "%AR_PS1%" %AR_ARGS%',
+    ':end',
+    'del "%AR_PS1%" >nul 2>&1',
+    'echo.',
+    'if "%~1"=="" pause',
+    'exit /b',
+    '',
+    '#AGENTREADY-POWERSHELL-PART',
+    ps1.split('\r\n').slice(3).join('\r\n'),
+  ].join('\r\n');
+}
+
+// The right installer for an operating system: a double-clickable .cmd on Windows, one shell script for macOS and Linux.
 function buildInstaller(ctx, os) {
   const man = o => buildManifest(recommend(Object.assign({}, ctx, { os: o })), ctx);
-  if (os === 'windows') return { name: 'agentready-setup.ps1', text: buildPs1(man('windows')), flag: '-DryRun',
-    runline: 'powershell -ExecutionPolicy Bypass -File .\\agentready-setup.ps1 -DryRun' };
+  if (os === 'windows') return { name: 'agentready-setup.cmd', text: buildCmd(buildPs1(man('windows'))), flag: '-DryRun',
+    runline: '.\\agentready-setup.cmd -DryRun' };
   return { name: 'agentready-setup.sh', text: buildSh(man('mac'), man('linux')), flag: '--dry-run',
     runline: 'bash agentready-setup.sh --dry-run' };
 }
 
-if (typeof module !== 'undefined') module.exports = { GOALS, understand, localModel, recommend, buildManifest, buildPs1, buildSh, buildInstaller };
+if (typeof module !== 'undefined') module.exports = { GOALS, understand, localModel, recommend, buildManifest, buildPs1, buildCmd, buildSh, buildInstaller };
 
 // ---------- UI ----------
 if (typeof document !== 'undefined') (function () {
@@ -721,12 +766,13 @@ if (typeof document !== 'undefined') (function () {
       '<div class="card firstwin"><h4>Your first win, ready to paste</h4><blockquote>' + esc(plan.firstWin) + '</blockquote></div>' +
       '<div class="card tips"><h4>After your first win</h4><ol>' + tips.map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div>' +
       '<div class="actions">' +
-        '<button class="btn" id="dl-main">Download installer for ' + (win ? 'Windows (.ps1)' : c.os === 'mac' ? 'macOS (.sh)' : 'Linux (.sh)') + '</button>' +
+        '<button class="btn" id="dl-main">Download installer for ' + (win ? 'Windows (.cmd)' : c.os === 'mac' ? 'macOS (.sh)' : 'Linux (.sh)') + '</button>' +
         '<button class="btn ghost" id="preview">Preview dry run</button>' +
-        '<button class="btn ghost" id="dl-other">' + (win ? 'macOS and Linux version (.sh)' : 'Windows version (.ps1)') + '</button>' +
+        '<button class="btn ghost" id="dl-other">' + (win ? 'macOS and Linux version (.sh)' : 'Windows version (.cmd)') + '</button>' +
         '<button class="btn ghost" id="dl-json">Download manifest (.json)</button></div>' +
       '<div class="runline">' + esc(inst.runline) + '</div>' +
-      '<p class="note">Run that first from your Downloads folder to see every step without changing anything. Drop <code>' + inst.flag + '</code> to install.' +
+      '<p class="note">' + (win ? 'Easiest: double-click the downloaded file and type 1 for a preview that changes nothing. Windows may ask "Are you sure you want to run this?" because it came from the internet. Or run the line above in a terminal from your Downloads folder; drop <code>' + inst.flag + '</code> to install.'
+          : 'Run that first from your Downloads folder to see every step without changing anything. Drop <code>' + inst.flag + '</code> to install.') +
         (win ? '' : ' The same file works on macOS and Linux: it uses Homebrew on a Mac, and apt, dnf, pacman or zypper on Linux.') + '</p>' +
       '<div class="term" id="term" hidden></div>';
     requestAnimationFrame(() => requestAnimationFrame(() => { const r = $('.ring'); if (r) r.style.setProperty('--v', sc); }));
