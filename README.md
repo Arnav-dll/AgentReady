@@ -74,7 +74,7 @@ flowchart TD
 
 ## How the stack gets picked
 
-The recommender is a small set of readable rules. No black box.
+The recommender is a transparent rule engine that feeds directly into the script and workspace compiler. You never have to follow this chart by hand—AgentReady turns these rules into a ready-to-run installer, permission guardrails, and your first prompt.
 
 ```mermaid
 flowchart TD
@@ -139,6 +139,66 @@ sequenceDiagram
     S-->>U: Paste and press Enter
 ```
 
+## What AgentReady generates
+
+AgentReady compiles your choices into four core setup and workspace files:
+
+- **`agentready-setup.ps1`** (bundled inside `agentready-setup.cmd` on Windows, or generated as `agentready-setup.sh` on macOS/Linux): The standalone installer script that audits installed tools, skips what exists, installs missing dependencies, and sets up your workspace with `-DryRun`, `-Learn`, and `-Auto` support.
+- **`.claude/settings.json`**: Hard permission guardrails that block destructive shell commands (`rm -rf`, force pushes) and prevent access to sensitive files (`.env`, secrets).
+- **`FIRST_TASK.md`**: A ready-to-paste starter prompt tailored to your goal placed right into your workspace so you never face an empty prompt.
+- **`agentready-setup.json`**: The complete manifest storing your goal, runtime flags, step definitions with reasons and check commands, and embedded workspace files.
+
+<details>
+<summary>Click to view example generated snippets</summary>
+
+### Generated PowerShell script (`agentready-setup.ps1`)
+
+```powershell
+# AgentReady setup script. Read it before you run it.
+#   Preview only:  powershell -ExecutionPolicy Bypass -File .\agentready-setup.ps1 -DryRun
+#   Ask each step: add -Learn      Run everything: add -Auto
+param([switch]$DryRun, [switch]$Learn, [switch]$Auto, [switch]$NoLaunch)
+$plan = @'
+{
+  "tool": "AgentReady",
+  "version": 2,
+  "workspace": "~/AgentReady-Workspace",
+  "agentCommand": "claude"
+}
+'@ | ConvertFrom-Json
+$learnMode = $Learn -or (($plan.mode -eq 'learn') -and -not $Auto)
+```
+
+### Guardrail permissions (`.claude/settings.json`)
+
+```json
+{
+  "permissions": {
+    "defaultMode": "default",
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)"
+    ]
+  }
+}
+```
+
+### Starter prompt (`FIRST_TASK.md`)
+
+```markdown
+# Your first win
+
+Open a terminal in this folder, run `claude`, and paste this:
+
+> Interview me in 5 questions about my skills and the role I want, then propose one portfolio project I can finish in two weeks. Scaffold it here with a README, and explain each file as you create it.
+```
+
+</details>
+
 ## Tech stack
 
 ```mermaid
@@ -192,6 +252,12 @@ flowchart LR
 | No community add-ons | 5 |
 
 This is a check of the chosen settings, not a penetration test.
+
+## Design decisions
+
+- **Native winget/npm installs + workspace isolation instead of Docker:** Docker requires WSL2, BIOS virtualization enabled, and 2–4 GB of idle RAM, which breaks 4–8 GB budget laptops and patchy-internet setups. Native package managers and workspace isolation keep the footprint minimal without requiring virtualization overhead.
+- **Why not just share the decision flowchart:** A chart doesn't handle installation, fix PATH/Node environment issues, write guardrails, or solve the empty-prompt cliff when staring at a newly opened terminal.
+- **Vanilla HTML/CSS/JS with zero backend:** No build step, runs completely offline on weak hardware, and guarantees zero data is sent.
 
 ## Try it
 
