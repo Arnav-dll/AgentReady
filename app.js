@@ -811,6 +811,7 @@ if (typeof document !== 'undefined') (function () {
   // navigation
   const LAST = 5;
   function go(n) {
+    n = Math.max(0, Math.min(LAST, n));   // never step outside the wizard
     if (n > 0 && !goalEl.value.trim()) {
       matchEl.textContent = 'Type what you want to get done, in any words, or tap an example.';
       goalEl.focus(); return;

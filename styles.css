@@ -57,6 +57,7 @@ h1 em{font-family:var(--serif);font-style:italic;font-weight:500;letter-spacing:
 .hero>:nth-child(4){animation-delay:210ms}.hero>:nth-child(5){animation-delay:300ms}
 @keyframes settle{from{opacity:0;transform:translateY(18px);filter:blur(6px)}}
 
+[hidden]{display:none!important}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 24px;border-radius:999px;border:1px solid var(--ink);cursor:pointer;
   font:inherit;font-weight:600;font-size:1rem;color:var(--card);text-decoration:none;background:var(--ink);
   transition:transform .16s var(--ease-out),background-color .2s ease,color .2s ease,border-color .2s ease}
