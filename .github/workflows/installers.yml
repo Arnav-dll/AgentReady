@@ -36,7 +36,7 @@ jobs:
           if exist "%USERPROFILE%\AgentReady-Workspace" exit /b 1
       - name: Real install
         if: runner.os != 'Windows'
-        run: bash test/out/agentready-${{ matrix.case }}.sh --auto
+        run: bash test/out/agentready-${{ matrix.case }}.sh --auto --no-launch
       - name: Real install (Windows)
         if: runner.os == 'Windows'
         shell: cmd

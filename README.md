@@ -135,7 +135,8 @@ sequenceDiagram
         end
     end
     S->>PC: Write workspace, rules, guardrails, first task
-    S-->>U: Next: open the workspace and paste FIRST_TASK.md
+    S->>PC: Copy the first task, open the workspace, start the AI
+    S-->>U: Paste and press Enter
 ```
 
 ## Tech stack
@@ -200,7 +201,7 @@ cd AgentReady
 # open index.html in a browser. That's it.
 ```
 
-After the wizard, on Windows: double-click the downloaded `agentready-setup.cmd` and type 1 for a preview that changes nothing. Or from a terminal in that folder:
+After the wizard, on Windows: double-click the downloaded `agentready-setup.cmd` and type 1. It asks that one question, installs everything, then opens your workspace with the AI running and your first task on the clipboard. Type 3 for a preview that changes nothing. Or from a terminal in that folder:
 
 ```powershell
 .agentready-setup.cmd -DryRun   # see every step, changes nothing
@@ -208,7 +209,7 @@ After the wizard, on Windows: double-click the downloaded `agentready-setup.cmd`
 .agentready-setup.cmd -Auto     # install everything
 ```
 
-It is a `.cmd` and not a `.ps1` because Windows blocks double-clicked PowerShell scripts by default: the window flashes and closes. The file is a short batch menu followed by the same readable PowerShell script.
+It is a `.cmd` and not a `.ps1` because Windows blocks double-clicked PowerShell scripts by default: the window flashes and closes. The file is a short batch launcher followed by the same readable PowerShell script.
 
 On macOS or Linux:
 

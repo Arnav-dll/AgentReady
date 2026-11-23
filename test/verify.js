@@ -27,7 +27,13 @@ const extra = win
   ? [path.join(process.env.LOCALAPPDATA, 'agy', 'bin'), path.join(process.env.APPDATA, 'npm'), path.join(process.env.LOCALAPPDATA, 'Programs', 'Ollama'),
      path.join(process.env.LOCALAPPDATA, 'Pandoc'), path.join(process.env.ProgramFiles, 'Pandoc'), path.join(process.env.ProgramFiles, 'nodejs')]
   : [path.join(home, '.local', 'bin'), '/opt/homebrew/bin', '/usr/local/bin', '/snap/bin'];
-const env = Object.assign({}, process.env, { PATH: extra.join(path.delimiter) + path.delimiter + process.env.PATH });
+// on Windows, also read the path a brand-new terminal would get, straight from the registry
+let fresh = '';
+if (win) fresh = String(spawnSync('powershell', ['-NoProfile', '-Command',
+  "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"], { encoding: 'utf8' }).stdout || '').trim();
+const env = Object.assign({}, process.env);
+for (const k of Object.keys(env)) if (k.toUpperCase() === 'PATH') delete env[k];
+env[win ? 'Path' : 'PATH'] = [fresh, extra.join(path.delimiter), process.env.PATH || process.env.Path].filter(Boolean).join(path.delimiter);
 for (const cmd of EXPECT[name] || []) {
   const r = spawnSync(cmd + ' --version', { shell: true, env, encoding: 'utf8', timeout: 120000 });
   check(r.status === 0, cmd + ' --version -> ' + String(r.stdout || r.stderr || r.error || '').trim().split('\n')[0]);
