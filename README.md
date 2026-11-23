@@ -11,7 +11,7 @@
 ![build](https://img.shields.io/badge/build%20step-none-0f9d6b)
 ![privacy](https://img.shields.io/badge/data%20sent-zero-0f9d6b)
 ![license](https://img.shields.io/badge/license-MIT-0f9d6b)
-![platform](https://img.shields.io/badge/installer-Windows%20first-444b5e)
+![platform](https://img.shields.io/badge/installer-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-444b5e)
 
 ![AgentReady landing page](docs/hero.png)
 
@@ -37,7 +37,8 @@ Powerful AI agents exist. Most people still can't use them, because the hard par
 ## What AgentReady does
 
 - **Goal first, in any words.** You say *"land a backend internship"*, *"grade 60 papers by Friday"* or *"keep my shop's accounts in a spreadsheet"*, not which tool you want. Nothing is rejected: a goal it does not recognise still gets a general setup built around your exact words.
-- **Fits your machine and wallet.** It uses the subscription you already have, and adds a small local model only when your internet or free tier can't carry you.
+- **Fits your machine and wallet.** It uses the subscription you already have, and asks about RAM and graphics card so a local model is sized to what the laptop can carry.
+- **Online, offline or both.** You choose rented online models, a model on your own machine, or an online agent with an offline backup. "Decide for me" adds a local model only when your internet or free tier can't carry you.
 - **Minimum stack.** Every item comes with a reason. It also lists what it left out, and why.
 - **Safe by default.** Guardrail rules, a dry run and a safety score before anything touches your laptop.
 - **A first win.** A ready-to-paste first task for your goal, so you never face an empty prompt, plus three tips for what to ask next.
@@ -53,7 +54,8 @@ flowchart TD
     G --> C
 
     D([What you already pay for]) --> R
-    E([Machine: OS, RAM, internet, daily use]) --> R
+    E([Machine: OS, RAM, GPU, internet, daily use]) --> R
+    H([Models: online, offline or both]) --> R
     F([Mode and guardrails]) --> R
     C --> R{{Recommender}}
     T --> W
@@ -65,7 +67,7 @@ flowchart TD
 
     S --> M[(Manifest JSON)]
     M --> P[Dry-run preview in the page]
-    M --> I[Installer script .ps1]
+    M --> I[Installer script:<br/>.ps1 on Windows, .sh on macOS and Linux]
     I --> W[Workspace: rules file, guardrails, first task]
     W --> Z([Your first win])
 ```
@@ -79,15 +81,15 @@ flowchart TD
     Q1{Paying for Claude?} -->|yes| CC[Claude Code]
     Q1 -->|no| Q2{Paying for ChatGPT?}
     Q2 -->|yes| CX[Codex CLI]
-    Q2 -->|no| GM[Gemini CLI on the free tier]
+    Q2 -->|no| GM[Antigravity CLI on the free tier]
 
-    CC & CX & GM --> Q3{Patchy internet, or heavy use on a free tier?}
+    CC & CX & GM --> Q3{Local model wanted?<br/>You chose offline or both, or on "decide for me":<br/>patchy internet, or heavy use on a free tier}
     Q3 -->|no| NL[Skip the local model: dead weight]
-    Q3 -->|yes| Q4{RAM}
-    Q4 -->|4 GB or less| SK[Skip: it would freeze the laptop]
-    Q4 -->|8 GB| L1[Ollama + 1.5b model]
-    Q4 -->|16 GB| L2[Ollama + 7b model]
-    Q4 -->|32 GB or more| L3[Ollama + 14b model]
+    Q3 -->|yes| Q4{RAM and graphics card}
+    Q4 -->|4 GB RAM or less| SK[Skip: it would freeze the laptop]
+    Q4 -->|8 GB RAM| L1[Ollama + 1.5b model<br/>3b with a 4 GB card]
+    Q4 -->|16 GB RAM, or an 8 GB card| L2[Ollama + 7b model]
+    Q4 -->|32 GB RAM, or 16 GB RAM with a 12 GB card| L3[Ollama + 14b model]
 
     NL & SK & L1 & L2 & L3 --> Q5{Terminal comfort}
     Q5 -->|new or some| VS[Add VS Code]
@@ -101,20 +103,24 @@ flowchart TD
     Q6 -->|nothing recognised| T5[Git, as an undo net]
 ```
 
+"Offline" is a chat-only setup: Ollama and a model, with no agent, because small local models are not yet reliable at running tools.
+
 ## What the installer does
+
+The page gives you the script for your system: `agentready-setup.ps1` on Windows, and one `agentready-setup.sh` that works on both macOS (Homebrew) and Linux (apt, dnf, pacman or zypper, found when it runs). The flow is the same on all three.
 
 ```mermaid
 sequenceDiagram
     actor U as You
     participant W as AgentReady page
-    participant S as setup.ps1
+    participant S as setup script
     participant PC as Your laptop
 
     U->>W: Goal, subscriptions, machine, guardrails
     W->>W: Recommend, score, estimate (all in the browser)
     W-->>U: Stack, reasons, dry-run preview
     U->>W: Download installer
-    U->>S: Run with -DryRun
+    U->>S: Run as a dry run
     S-->>U: Every step and file, nothing changed
     U->>S: Run for real (Learn or Auto)
     loop each step
@@ -145,12 +151,12 @@ flowchart LR
 
     subgraph Output["What you download"]
         JSON[("agentready-setup.json")]
-        PS1["agentready-setup.ps1"]
+        PS1["agentready-setup.ps1 (Windows)<br/>agentready-setup.sh (macOS, Linux)"]
     end
 
     subgraph Laptop["Installed on your laptop"]
-        WG["winget<br/>Git · Node.js · VS Code · GitHub CLI · Pandoc · Python · Ollama"]
-        NPM["npm<br/>Claude Code · Codex CLI · Gemini CLI"]
+        WG["winget, Homebrew or the Linux package manager<br/>Git · Node.js · VS Code · GitHub CLI · Pandoc · Python · Ollama"]
+        NPM["npm or the vendor's installer<br/>Claude Code · Codex CLI · Antigravity CLI"]
         WS["~/AgentReady-Workspace<br/>rules file · .claude/settings.json · FIRST_TASK.md"]
     end
 
@@ -167,9 +173,10 @@ flowchart LR
 | Look | Flat matte surfaces with an inline SVG paper grain over a soft colour field | No images or fonts to download; cheap to paint on a budget laptop |
 | Motion | CSS transitions on `transform` and `opacity`, one `IntersectionObserver` | Stays smooth on weak hardware; reduced-motion keeps the fades and drops the movement |
 | Logic | Plain rule functions in `app.js` | Easy to read, easy to test in Node |
-| Installer | Generated PowerShell | Nothing to trust but a script you can read |
-| Packages | winget and vendor npm packages | Official sources only |
-| Local AI | Ollama, model sized to RAM | Keeps low-spec and offline users working |
+| Installer | Generated PowerShell (Windows) and plain shell (macOS, Linux) | Nothing to trust but a script you can read. The shell script needs no jq or Python |
+| Packages | winget, Homebrew, apt / dnf / pacman / zypper, vendor installers and npm packages | Official sources only |
+| Free agent | Antigravity CLI (`agy`) | Gemini CLI stopped serving free personal accounts on 18 June 2026 |
+| Local AI | Ollama, model sized to RAM and graphics memory | Keeps low-spec and offline users working |
 
 ## Safety score
 
@@ -206,7 +213,15 @@ powershell -ExecutionPolicy Bypass -File .\agentready-setup.ps1 -Learn
 powershell -ExecutionPolicy Bypass -File .\agentready-setup.ps1 -Auto
 ```
 
-Tools that are already installed are skipped, and existing workspace files are never overwritten.
+On macOS or Linux:
+
+```bash
+bash agentready-setup.sh --dry-run   # see every step, changes nothing
+bash agentready-setup.sh --learn     # ask before each step
+bash agentready-setup.sh --auto      # install everything
+```
+
+Tools that are already installed are skipped, and existing workspace files are never overwritten. If `winget` is not recognised on a Windows machine, the script re-registers App Installer first, and stops with instructions if that does not work.
 
 ## Project layout
 
@@ -222,15 +237,17 @@ AgentReady/
 ## Honest limits
 
 - The goal reader and recommender are **rule-based**, not an ML model. Any goal is accepted, but the reader only recognises English keywords: a goal in another language, or one outside code, documents and data, gets the general setup with your words passed to the agent.
-- The installer script is **Windows only**. macOS and Linux users get the manifest as a checklist.
+- The macOS and Linux script has **never run on a real Mac or Linux machine**. It was checked on Windows in Git Bash with the system faked: syntax, dry runs, and a real run against stub commands. Linux covers apt, dnf, pacman and zypper only, and VS Code on Linux needs snap.
+- **Offline mode is chat-only.** No agent is installed, so the model cannot create files or run tools.
+- The local model is always a Qwen coder model, also for goals that are not about code.
 - The cost figure is a **rough estimate**. Provider limits change.
-- The community skill pack step is **untested end to end**, and no full install has been run on a clean machine: the script has only been verified with `-DryRun`.
+- The community skill pack step is **untested end to end**, and no full install has been run on a clean machine: the Windows script has only been verified with `-DryRun`, and the winget repair only as a simulated dry run.
 
 ## Roadmap
 
 ```mermaid
 flowchart LR
-    N["Now<br/>rule-based wizard, any goal<br/>Windows installer"] --> A["Next<br/>LLM goal understanding<br/>macOS and Linux scripts"]
+    N["Now<br/>rule-based wizard, any goal<br/>Windows, macOS and Linux installers"] --> A["Next<br/>LLM goal understanding<br/>installers tested on clean machines"]
     A --> B["Then<br/>desktop companion that notices<br/>what you do by hand"]
     B --> C["Later<br/>sandbox-tested catalog<br/>post-install red-team check"]
 ```

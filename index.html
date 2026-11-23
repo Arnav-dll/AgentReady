@@ -29,7 +29,7 @@
       <a class="btn ghost" href="#itches">Show me the itches</a>
     </div>
     <ul class="stats">
-      <li class="glass"><b>4</b><span>questions, starting with your goal</span></li>
+      <li class="glass"><b>5</b><span>short steps, starting with your goal</span></li>
       <li class="glass"><b>₹0</b><span>new subscriptions added by default</span></li>
       <li class="glass"><b>1</b><span>readable script, with a dry run</span></li>
       <li class="glass"><b>0</b><span>data sent anywhere: it all runs in this page</span></li>
@@ -52,7 +52,7 @@
     <h2>How it scratches</h2>
     <div class="how">
       <article class="glass"><span class="n">1</span><h3>Goal first</h3><p>You say what you want, not which tool. We map the goal to the capabilities it needs.</p></article>
-      <article class="glass"><span class="n">2</span><h3>Fits your machine</h3><p>Low RAM or patchy internet changes the plan. A small local model steps in when it helps.</p></article>
+      <article class="glass"><span class="n">2</span><h3>Fits your machine</h3><p>RAM, graphics card and internet change the plan. You choose online models, an offline one, or both.</p></article>
       <article class="glass"><span class="n">3</span><h3>Minimum stack</h3><p>Every item has a reason. We also list what we left out, and why.</p></article>
       <article class="glass"><span class="n">4</span><h3>Safe by default</h3><p>Guardrails, a dry run and a safety score before anything touches your laptop.</p></article>
     </div>
@@ -60,11 +60,11 @@
 
   <section id="wizard" class="block">
     <h2>Fix my setup</h2>
-    <p class="sub">Four short steps. Nothing is installed until you download and run the script yourself.</p>
+    <p class="sub">Five short steps. Nothing is installed until you download and run the script yourself.</p>
 
     <div class="glass wizard">
       <ol class="steps" id="steps">
-        <li class="on">Goal</li><li>You</li><li>Machine</li><li>Safety</li><li>Your setup</li>
+        <li class="on">Goal</li><li>You</li><li>Machine</li><li>Models</li><li>Safety</li><li>Your setup</li>
       </ol>
 
       <div class="pane on" data-pane="0">
@@ -102,6 +102,9 @@
           <label>Memory (RAM)
             <select id="ram"><option value="4">4 GB or less</option><option value="8">8 GB</option><option value="16">16 GB</option><option value="32">32 GB or more</option></select>
           </label>
+          <label>Graphics card (GPU)
+            <select id="gpu"><option value="none">None, built-in, or not sure</option><option value="4">Dedicated, about 4 GB</option><option value="8">Dedicated, 6 to 8 GB</option><option value="12">Dedicated, 12 GB or more</option><option value="apple">Apple Silicon (M-series Mac)</option></select>
+          </label>
           <label>Internet
             <select id="net"><option value="good">Reliable</option><option value="patchy">Patchy or metered</option></select>
           </label>
@@ -112,6 +115,17 @@
       </div>
 
       <div class="pane" data-pane="3">
+        <h3>Where should the AI run?</h3>
+        <div class="chips" data-group="brain">
+          <button data-value="auto" class="chip on">Decide for me</button>
+          <button data-value="cloud">Online: rented models</button>
+          <button data-value="local">Offline: on my own machine</button>
+          <button data-value="both">Both: online, with an offline backup</button>
+        </div>
+        <p class="hint" id="brain-hint" aria-live="polite"></p>
+      </div>
+
+      <div class="pane" data-pane="4">
         <h3>How should the installer behave?</h3>
         <div class="chips" data-group="mode">
           <button data-value="learn" class="chip on">Learn: ask me before each step</button>
@@ -123,7 +137,7 @@
         <label class="switch"><input type="checkbox" id="g-thirdparty" checked><span></span>Allow community add-ons when they help my goal</label>
       </div>
 
-      <div class="pane" data-pane="4" id="result"></div>
+      <div class="pane" data-pane="5" id="result"></div>
 
       <div class="wiz-nav">
         <button class="btn ghost" id="back" hidden>Back</button>

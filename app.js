@@ -69,11 +69,37 @@ const AGENTS = {
             run: 'npm install -g @anthropic-ai/claude-code' },
   codex:  { name: 'Codex CLI', check: 'codex', cmd: 'codex', ctxFile: 'AGENTS.md',
             run: 'npm install -g @openai/codex' },
-  gemini: { name: 'Gemini CLI', check: 'gemini', cmd: 'gemini', ctxFile: 'GEMINI.md',
-            run: 'npm install -g @google/gemini-cli' },
+  // Gemini CLI stopped serving free personal accounts on 18 June 2026. Google's replacement is Antigravity CLI.
+  agy:    { name: 'Antigravity CLI', check: 'agy', cmd: 'agy', ctxFile: 'AGENTS.md', node: false,
+            run: { windows: 'irm https://antigravity.google/cli/install.ps1 | iex',
+                   mac: 'curl -fsSL https://antigravity.google/cli/install.sh | bash',
+                   linux: 'curl -fsSL https://antigravity.google/cli/install.sh | bash' } },
 };
 
+// Install commands per operating system. Windows uses winget, macOS uses Homebrew, and Linux uses
+// whichever package manager the machine has (the .sh script works that out when it runs).
 const WINGET = id => 'winget install --id ' + id + ' -e --accept-source-agreements --accept-package-agreements';
+const PMS = ['apt', 'dnf', 'pacman', 'zypper'];
+const PKG = (apt, pacman) => ({ apt: 'sudo apt-get install -y ' + apt, dnf: 'sudo dnf install -y ' + apt,
+                                pacman: 'sudo pacman -S --needed --noconfirm ' + (pacman || apt), zypper: 'sudo zypper install -y ' + apt });
+const TOOLS = {
+  brew:   { name: 'Homebrew', check: 'brew',
+            mac: '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"' },
+  curl:   { name: 'curl', check: 'curl', linux: PKG('curl') },
+  git:    { name: 'Git', check: 'git', windows: WINGET('Git.Git'), mac: 'brew install git', linux: PKG('git') },
+  node:   { name: 'Node.js LTS', check: 'node', windows: WINGET('OpenJS.NodeJS.LTS'), mac: 'brew install node',
+            linux: { apt: 'curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - && sudo apt-get install -y nodejs',
+                     dnf: 'curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash - && sudo dnf install -y nodejs',
+                     pacman: 'sudo pacman -S --needed --noconfirm nodejs npm', zypper: 'sudo zypper install -y nodejs npm' } },
+  code:   { name: 'VS Code', check: 'code', windows: WINGET('Microsoft.VisualStudioCode'), mac: 'brew install --cask visual-studio-code',
+            linux: 'sudo snap install code --classic || { echo "No snap on this system. Get VS Code from https://code.visualstudio.com/docs/setup/linux"; false; }' },
+  gh:     { name: 'GitHub CLI', check: 'gh', windows: WINGET('GitHub.cli'), mac: 'brew install gh', linux: PKG('gh', 'github-cli') },
+  pandoc: { name: 'Pandoc', check: 'pandoc', windows: WINGET('JohnMacFarlane.Pandoc'), mac: 'brew install pandoc', linux: PKG('pandoc', 'pandoc-cli') },
+  python: { name: 'Python', check: { windows: 'py', mac: 'python3', linux: 'python3' }, windows: WINGET('Python.Python.3.12'),
+            mac: 'brew install python', linux: PKG('python3 python3-pip', 'python python-pip') },
+  ollama: { name: 'Ollama', check: 'ollama', windows: WINGET('Ollama.Ollama'), mac: 'brew install ollama && brew services start ollama',
+            linux: 'curl -fsSL https://ollama.com/install.sh | sh' },
+};
 
 // ---------- logic ----------
 const has = (t, frag) => new RegExp('(?:^|[^a-z0-9])(?:' + frag + ')(?![a-z0-9])').test(t);
@@ -94,62 +120,98 @@ function understand(text) {
     : capNames ? 'I picked up: ' + capNames + '.'
     : 'That is a new one for me, so you get the general setup. Your exact words go into the agent\'s rules and its first task.';
   return { id: arch ? arch.id : 'custom', label: raw || 'A general AI agent setup', needs, read, known: !!(arch || caps.length),
+           codey: caps.some(c => c.needs.includes('git')),
            firstWin: mine + (arch || GENERAL).firstWin, tips: (arch || GENERAL).tips };
 }
 
-function localModel(ram) {
-  if (ram >= 32) return { tag: 'qwen2.5-coder:14b', size: '9 GB' };
-  if (ram >= 16) return { tag: 'qwen2.5-coder:7b', size: '4.7 GB' };
-  if (ram >= 8)  return { tag: 'qwen2.5-coder:1.5b', size: '1 GB' };
-  return null;
+// Local models, smallest first. Download sizes are approximate.
+const MODELS = [['1.5b', '1 GB'], ['3b', '1.9 GB'], ['7b', '4.7 GB'], ['14b', '9 GB']];
+
+// RAM decides what the machine can hold. A graphics card decides how fast it answers, and can lift the size.
+function localModel(ram, gpu) {
+  if (!(ram >= 8)) return null;
+  const apple = gpu === 'apple', vram = +gpu || 0;
+  const ramTier = ram >= 32 ? 3 : ram >= 16 ? 2 : apple ? 1 : 0;
+  const gpuTier = vram >= 12 ? 3 : vram >= 8 ? 2 : vram >= 4 ? 1 : -1;
+  const tier = Math.max(ramTier, Math.min(gpuTier, ram >= 16 ? 3 : 2));
+  const speed = apple || gpuTier >= tier ? 'fast' : vram ? 'split' : 'slow';
+  const speedText = apple ? 'Apple Silicon shares its memory with the graphics chip, so answers come quickly.'
+    : speed === 'fast' ? 'It fits inside your graphics card\'s memory, so answers come quickly.'
+    : speed === 'split' ? 'It is bigger than your graphics card\'s memory, so part of it runs on the processor: smarter, but slower.'
+    : 'With no dedicated graphics card it runs on the processor: expect a few words a second.';
+  return { tag: 'qwen2.5-coder:' + MODELS[tier][0], size: MODELS[tier][1], speed, speedText };
 }
 
 function recommend(ctx) {
   const goal = understand(ctx.goalText || (GOALS.find(g => g.id === ctx.goalId) || {}).label);
-  const subs = ctx.subs || [];
+  const subs = ctx.subs || [], os = ctx.os || 'windows';
   const steps = [], skipped = [];
   const add = (kind, name, why, check, run, extra) => steps.push(Object.assign({ kind, name, why, check, run }, extra));
+  // a tool from the table, with the install command for this operating system
+  const tool = (kind, id, why) => {
+    const t = TOOLS[id], r = t[os], check = typeof t.check === 'string' ? t.check : t.check[os];
+    add(kind, t.name, why, check, typeof r === 'string' ? r : r.apt, typeof r === 'string' ? null : { alt: r });
+  };
 
   // agent: use what the user already pays for
   let agentId, agentWhy;
   if (subs.includes('claude')) { agentId = 'claude'; agentWhy = 'You already pay for Claude, and Claude Code is included in that plan. No new spend.'; }
   else if (subs.includes('chatgpt')) { agentId = 'codex'; agentWhy = 'You already pay for ChatGPT, and Codex CLI signs in with that plan. No new spend.'; }
-  else { agentId = 'gemini'; agentWhy = 'You have no paid plan, and Gemini CLI has a free tier with a Google account. It is the cheapest way to start.'; }
+  else { agentId = 'agy'; agentWhy = 'You have no paid plan, and Google\'s Antigravity CLI has a free tier with a personal Google account. It is the cheapest way to start.'; }
   const agent = AGENTS[agentId];
 
-  if (goal.needs.includes('git'))
-    add('base', 'Git', 'Agents save and undo their work with Git. It is your safety net when an edit goes wrong.', 'git', WINGET('Git.Git'));
-  add('base', 'Node.js LTS', 'The agent itself is installed through Node\'s package manager.', 'node', WINGET('OpenJS.NodeJS.LTS'));
-  if (ctx.skill === 'pro') skipped.push({ name: 'VS Code', why: 'You already have an editor you like.' });
-  else add('editor', 'VS Code', ctx.skill === 'new'
-    ? 'A friendly window to see the files your agent creates, with a built-in terminal so you never hunt for one.'
-    : 'A free editor with a built-in terminal, so files and agent sit side by side.', 'code', WINGET('Microsoft.VisualStudioCode'));
-  add('agent', agent.name, agentWhy, agent.check, agent.run);
+  // where the AI runs: the user's choice, checked against what the machine can carry
+  const pick = ctx.brain || 'auto';
+  const lm = localModel(ctx.ram, ctx.gpu);
+  const autoLocal = ctx.net === 'patchy' || (agentId === 'agy' && ctx.hours > 3);
+  const wantsLocal = pick === 'local' || pick === 'both' || (pick === 'auto' && autoLocal);
+  const brain = pick === 'local' && lm ? 'local' : wantsLocal && lm ? 'both' : 'cloud';
+  const chatOnly = brain === 'local';
+  const local = brain === 'cloud' ? null : lm;
 
-  // local fallback: only when it helps and the machine can carry it
-  const lm = localModel(ctx.ram);
-  const wantsLocal = ctx.net === 'patchy' || (agentId === 'gemini' && ctx.hours > 3);
-  let local = null;
-  if (wantsLocal && lm) {
-    local = lm;
-    const reason = ctx.net === 'patchy' ? 'Your internet is patchy' : 'You plan heavy use on a free tier';
-    add('local', 'Ollama', reason + ', so a small model on your own laptop keeps you working offline and for free.', 'ollama', WINGET('Ollama.Ollama'));
-    add('local', 'Model ' + lm.tag, 'Sized for your ' + ctx.ram + ' GB of RAM (about ' + lm.size + ' on disk). Chat with it using: ollama run ' + lm.tag, null, 'ollama pull ' + lm.tag);
+  if (os === 'mac')
+    tool('base', 'brew', 'macOS has no built-in installer for these tools. Homebrew is the standard one, and everything below comes through it.');
+  if (os === 'linux')
+    tool('base', 'curl', 'Fetches the official installers used by the steps below.');
+  if (chatOnly ? goal.codey : goal.needs.includes('git'))
+    tool('base', 'git', chatOnly ? 'Saves versions of your code, so a bad change is one command away from undone.'
+      : 'Agents save and undo their work with Git. It is your safety net when an edit goes wrong.');
+  if (!chatOnly && agent.node !== false) tool('base', 'node', 'The agent itself is installed through Node\'s package manager.');
+  if (ctx.skill === 'pro') skipped.push({ name: 'VS Code', why: 'You already have an editor you like.' });
+  else if (chatOnly && !goal.codey) skipped.push({ name: 'VS Code', why: 'A chat-only setup makes no files to browse. Add an editor when you start writing code.' });
+  else tool('editor', 'code', ctx.skill === 'new'
+    ? 'A friendly window to see the files in your workspace, with a built-in terminal so you never hunt for one.'
+    : 'A free editor with a built-in terminal, so files and AI sit side by side.');
+  if (!chatOnly) add('agent', agent.name, agentWhy, agent.check, typeof agent.run === 'string' ? agent.run : agent.run[os]);
+  else skipped.push({ name: 'An agent (Claude Code, Codex, Antigravity)', why: 'Agents are built for the big online models. Small local models are not yet reliable at running tools, so offline you chat with the model and stay in charge of your files. Pick "Both" to get an agent as well.' });
+
+  if (local) {
+    const reason = pick === 'local' ? 'You chose to run offline. Ollama runs AI models on your own machine: private, free and with no daily limit.'
+      : pick === 'both' ? 'You asked for an offline backup. Ollama runs a model on your own machine for when the internet or your plan runs out.'
+      : (ctx.net === 'patchy' ? 'Your internet is patchy' : 'You plan heavy use on a free tier') + ', so a small model on your own machine keeps you working offline and for free.';
+    tool('local', 'ollama', reason);
+    const fit = ctx.gpu === 'apple' ? ctx.ram + ' GB of shared memory' : +ctx.gpu ? ctx.ram + ' GB of RAM and ' + ctx.gpu + ' GB graphics card' : ctx.ram + ' GB of RAM';
+    add('local', 'Model ' + lm.tag, 'Sized for your ' + fit + ' (about ' + lm.size + ' to download). ' + lm.speedText + ' Chat with it using: ollama run ' + lm.tag, null, 'ollama pull ' + lm.tag);
+  } else if (pick === 'cloud') {
+    skipped.push({ name: 'Local model', why: 'You chose online models only.' });
   } else if (wantsLocal) {
-    skipped.push({ name: 'Local model', why: 'With 4 GB of RAM or less a local model would crawl and freeze your laptop. Use the cloud agent in short sessions instead.' });
+    skipped.push({ name: 'Local model', why: 'With 4 GB of RAM or less a local model would crawl and freeze your laptop.' + (pick === 'local' ? ' So this is an online setup instead: use the cloud agent in short sessions.' : ' Use the cloud agent in short sessions instead.') });
   } else {
     skipped.push({ name: 'Local model', why: 'Your internet and plan cover your usage, so several GB of model would be dead weight.' });
   }
 
-  if (goal.needs.includes('gh'))
-    add('tool', 'GitHub CLI', 'Lets your agent publish projects and open pull requests, which is what people reviewing your work look at.', 'gh', WINGET('GitHub.cli'));
+  if (goal.needs.includes('gh')) {
+    if (chatOnly) skipped.push({ name: 'GitHub CLI', why: 'It is for an agent to publish your work. A chat-only setup has no use for it yet.' });
+    else tool('tool', 'gh', 'Lets your agent publish projects and open pull requests, which is what people reviewing your work look at.');
+  }
   if (goal.needs.includes('pandoc'))
-    add('tool', 'Pandoc', 'Turns the agent\'s text into Word or PDF files you can hand out or submit.', 'pandoc', WINGET('JohnMacFarlane.Pandoc'));
+    tool('tool', 'pandoc', 'Turns the AI\'s text into Word or PDF files you can hand out or submit.');
   if (goal.needs.includes('python'))
-    add('tool', 'Python', 'Your goal involves data. With Python the agent can read spreadsheets and CSV files and draw charts, instead of guessing at numbers.', 'py', WINGET('Python.Python.3.12'));
+    tool('tool', 'python', chatOnly ? 'Your goal involves data. The model can write small Python scripts for your spreadsheets, and this lets you run them.'
+      : 'Your goal involves data. With Python the agent can read spreadsheets and CSV files and draw charts, instead of guessing at numbers.');
 
   let thirdParty = false;
-  if (goal.needs.includes('skills') && agentId === 'claude') {
+  if (goal.needs.includes('skills') && agentId === 'claude' && !chatOnly) {
     if (ctx.guard.thirdparty) {
       thirdParty = true;
       add('addon', 'Superpowers skill pack', 'Community skills that make the agent plan, test and debug step by step instead of guessing. Community-made, so we flag it.', null,
@@ -157,55 +219,82 @@ function recommend(ctx) {
     } else skipped.push({ name: 'Superpowers skill pack', why: 'You turned community add-ons off.' });
   }
 
-  skipped.push({ name: 'A second AI subscription', why: 'It would add cost, not capability, for this goal.' });
-  skipped.push({ name: 'MCP servers', why: 'None are needed on day one. Add one when you actually hit the need.' });
+  if (!chatOnly) {
+    skipped.push({ name: 'A second AI subscription', why: 'It would add cost, not capability, for this goal.' });
+    skipped.push({ name: 'MCP servers', why: 'None are needed on day one. Add one when you actually hit the need.' });
+  }
 
   // workspace files
   const files = [];
-  const rules = [
-    '# AgentReady workspace', '',
-    'Goal: ' + goal.label, '',
-    '## How to work with me',
-    ctx.skill === 'new' ? '- I am new to this. Explain every command before running it, in plain language.' : '- Keep explanations short unless I ask.',
-    ctx.mode === 'learn' ? '- Ask before each change and tell me why it is needed.' : '- Work through tasks end to end, then summarise what changed.',
-    '- Stay inside this folder.',
-    ctx.guard.destructive ? '- Never force-delete files or force-push. Ask first if something must be removed.' : null,
-    ctx.guard.secrets ? '- Never read or print .env files, keys or passwords.' : null,
-    '- Prefer small steps. Suggest a fresh session when the conversation gets long, to save tokens.',
-  ].filter(x => x !== null).join('\n') + '\n';
-  files.push({ path: agent.ctxFile, content: rules, why: 'Tells ' + agent.name + ' your goal and house rules every session.' });
-
-  if (agentId === 'claude') {
+  const agentCommand = chatOnly ? 'ollama run ' + lm.tag : agent.cmd;
+  const firstWin = (chatOnly ? 'You cannot see or change my files, so show me every file in full and tell me where to save it. ' : '') + goal.firstWin;
+  if (!chatOnly) {
+    const rules = [
+      '# AgentReady workspace', '',
+      'Goal: ' + goal.label, '',
+      '## How to work with me',
+      ctx.skill === 'new' ? '- I am new to this. Explain every command before running it, in plain language.' : '- Keep explanations short unless I ask.',
+      ctx.mode === 'learn' ? '- Ask before each change and tell me why it is needed.' : '- Work through tasks end to end, then summarise what changed.',
+      '- Stay inside this folder.',
+      ctx.guard.destructive ? '- Never force-delete files or force-push. Ask first if something must be removed.' : null,
+      ctx.guard.secrets ? '- Never read or print .env files, keys or passwords.' : null,
+      '- Prefer small steps. Suggest a fresh session when the conversation gets long, to save tokens.',
+    ].filter(x => x !== null).join('\n') + '\n';
+    files.push({ path: agent.ctxFile, content: rules, why: 'Tells ' + agent.name + ' your goal and house rules every session.' });
+  }
+  if (agentId === 'claude' && !chatOnly) {
     const deny = [];
     if (ctx.guard.destructive) deny.push('Bash(rm -rf:*)', 'Bash(git push --force:*)', 'Bash(git reset --hard:*)');
     if (ctx.guard.secrets) deny.push('Read(./.env)', 'Read(./.env.*)', 'Read(./secrets/**)');
     const settings = { permissions: { defaultMode: ctx.mode === 'learn' ? 'default' : 'acceptEdits', deny } };
     files.push({ path: '.claude/settings.json', content: JSON.stringify(settings, null, 2) + '\n', why: 'Hard permission rules the agent cannot talk its way past.' });
   }
-  files.push({ path: 'FIRST_TASK.md', content: '# Your first win\n\nOpen a terminal in this folder, run `' + agent.cmd + '`, and paste this:\n\n> ' + goal.firstWin + '\n', why: 'A ready first task, so you are not staring at an empty prompt.' });
+  files.push({ path: 'FIRST_TASK.md', content: '# Your first win\n\nOpen a terminal in this folder, run `' + agentCommand + '`, and paste this:\n\n> ' + firstWin + '\n' +
+    (chatOnly ? '\nThis model only chats. It cannot create files, so save what it gives you into this folder yourself.\n' : '') +
+    (brain === 'both' ? '\nNo internet, or out of quota? Run `ollama run ' + lm.tag + '` to chat with the model on your own machine.\n' : ''),
+    why: 'A ready first task, so you are not staring at an empty prompt.' });
 
-  return { goal, agentId, agent, steps, skipped, files, local, thirdParty,
-           cost: cost(agentId, ctx, local), safety: safety(agentId, ctx, thirdParty) };
+  // only keep a tip if the tool it leans on is actually in this stack
+  const got = n => steps.some(s => s.name === n);
+  const tips = goal.tips.filter(t => (!/pandoc/i.test(t) || got('Pandoc')) && (!/\bgh\b/.test(t) || got('GitHub CLI')));
+
+  return { goal, os, brain, agentId: chatOnly ? 'local' : agentId, agent: chatOnly ? null : agent, agentCommand, firstWin, tips,
+           steps, skipped, files, local, thirdParty,
+           cost: cost(agentId, ctx, local, chatOnly), safety: safety(agentId, ctx, thirdParty, chatOnly, os) };
 }
 
-function cost(agentId, ctx, local) {
-  const h = ctx.hours, free = agentId === 'gemini';
+function cost(agentId, ctx, local, chatOnly) {
+  const h = ctx.hours, free = agentId === 'agy';
   let level, text;
-  if (free) {
-    if (h <= 1) { level = 'ok'; text = 'The free tier should comfortably cover about ' + h + ' h a day.'; }
-    else if (h <= 3) { level = 'warn'; text = 'The free tier will be tight at ' + h + ' h a day. Expect to hit the daily limit on busy days.'; }
-    else { level = 'bad'; text = 'At ' + h + ' h a day you will hit free limits most days.' + (local ? ' The local model covers the gap.' : ''); }
+  if (chatOnly) {
+    level = 'ok'; text = 'It runs on your own machine: no subscription and no daily limit. You pay once in download (' + local.size + ') and a little electricity.';
+  } else if (free) {
+    if (h <= 1) { level = 'ok'; text = 'The free tier has a weekly quota. About ' + h + ' h a day should fit inside it.'; }
+    else if (h <= 3) { level = 'warn'; text = 'The free tier has a weekly quota, and ' + h + ' h a day will be tight. Expect to run out before the week ends.'; }
+    else { level = 'bad'; text = 'At ' + h + ' h a day you will use up the free weekly quota in a few days.'; }
+    if (local && h > 1) text += ' The local model covers the gap.';
   } else {
     if (h <= 3) { level = 'ok'; text = 'Your existing plan should cover about ' + h + ' h a day.'; }
-    else { level = 'warn'; text = 'At ' + h + ' h a day you may hit plan limits on busy days. Fresh sessions per task stretch it further.'; }
+    else { level = 'warn'; text = 'At ' + h + ' h a day you may hit plan limits on busy days. Fresh sessions per task stretch it further.' + (local ? ' The local model covers the gap.' : ''); }
   }
   return { newSpend: 0, level, text };
 }
 
-function safety(agentId, ctx, thirdParty) {
+function safety(agentId, ctx, thirdParty, chatOnly, os) {
   const hard = agentId === 'claude';
-  const checks = [
-    [true, 20, 'Every tool comes from its official source (winget or the vendor\'s npm package)'],
+  const source = os === 'mac' ? 'Homebrew, or the vendor\'s own installer or npm package'
+    : os === 'linux' ? 'your system\'s package manager, or the installer its maker recommends'
+    : 'winget, or the vendor\'s own installer or npm package';
+  const checks = chatOnly ? [
+    [true, 20, 'Every tool comes from its official source (' + source + ')'],
+    [true, 15, 'Your prompts and files never leave your machine'],
+    [true, 20, 'Nothing to block: a chat-only model cannot run commands'],
+    [true, 20, 'It cannot open files, so your secrets stay unread'],
+    [ctx.mode === 'learn', 10, 'You approve each install step (Learn mode)'],
+    [true, 10, 'No agent has any permissions on your machine'],
+    [true, 5, 'No community add-ons'],
+  ] : [
+    [true, 20, 'Every tool comes from its official source (' + source + ')'],
     [true, 15, 'The agent works in its own folder, not your whole disk'],
     [ctx.guard.destructive, 20, 'Destructive commands blocked'],
     [ctx.guard.secrets, 20, 'Secret files off limits'],
@@ -218,9 +307,9 @@ function safety(agentId, ctx, thirdParty) {
 }
 
 function buildManifest(plan, ctx) {
-  return { tool: 'AgentReady', version: 1, goal: plan.goal.label, mode: ctx.mode,
-           workspace: '~/AgentReady-Workspace', agentCommand: plan.agent.cmd,
-           steps: plan.steps.map(s => ({ name: s.name, why: s.why, check: s.check || '', run: s.run })),
+  return { tool: 'AgentReady', version: 2, goal: plan.goal.label, mode: ctx.mode, os: plan.os, brain: plan.brain,
+           workspace: '~/AgentReady-Workspace', agentCommand: plan.agentCommand,
+           steps: plan.steps.map(s => Object.assign({ name: s.name, why: s.why, check: s.check || '', run: s.run }, s.alt ? { alt: s.alt } : null)),
            files: plan.files.map(f => ({ path: f.path, content: f.content })) };
 }
 
@@ -235,10 +324,30 @@ function buildPs1(manifest) {
     json,
     "'@ | ConvertFrom-Json",
     "$learnMode = $Learn -or (($plan.mode -eq 'learn') -and -not $Auto)",
-    "function Update-SessionPath { $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') }",
+    "function Update-SessionPath { $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') + ';' + (Join-Path $env:LOCALAPPDATA 'Microsoft\\WindowsApps') }",
     "Write-Host ''",
     "Write-Host ('AgentReady: ' + $plan.goal) -ForegroundColor Magenta",
     "if ($DryRun) { Write-Host 'DRY RUN: nothing will be changed.' -ForegroundColor Yellow }",
+    '# winget ships with Windows 10 and 11, but on some machines it is not registered yet. Repair it before any step needs it.',
+    "$needsWinget = @($plan.steps | Where-Object { $_.run -like 'winget *' -and -not ($_.check -and (Get-Command $_.check -ErrorAction SilentlyContinue)) }).Count -gt 0",
+    'Update-SessionPath',
+    'if ($needsWinget -and -not (Get-Command winget -ErrorAction SilentlyContinue)) {',
+    "  $fix = 'Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe'",
+    "  Write-Host ''",
+    "  Write-Host 'winget, the Windows app installer, is not recognised on this machine.' -ForegroundColor Yellow",
+    "  Write-Host ('      fix: ' + $fix)",
+    "  if ($DryRun) { Write-Host '      A real run tries this fix first, and stops if it does not work.' }",
+    '  else {',
+    '    try { Invoke-Expression $fix } catch { Write-Host $_ -ForegroundColor Red }',
+    '    Update-SessionPath',
+    '    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {',
+    "      Write-Host 'Still no winget. Install App Installer from the Microsoft Store (https://aka.ms/getwinget), open a new terminal and run this script again.' -ForegroundColor Red",
+    "      Write-Host 'Nothing was installed.'",
+    '      exit 1',
+    '    }',
+    "    Write-Host '      winget works now' -ForegroundColor Green",
+    '  }',
+    '}',
     '$log = @(); $i = 0; $total = @($plan.steps).Count',
     'foreach ($s in $plan.steps) {',
     '  $i++',
@@ -286,13 +395,207 @@ function buildPs1(manifest) {
   ].join('\r\n');
 }
 
-if (typeof module !== 'undefined') module.exports = { GOALS, understand, recommend, buildManifest, buildPs1 };
+// One script for macOS and Linux. It is plain shell with no JSON to parse, because a clean machine has no jq or Python.
+function buildSh(mac, linux) {
+  const q = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
+  const stepLine = s => '  step ' + q(s.name) + ' ' + q(s.why) + ' ' + q(s.check) + ' ' +
+    (s.alt ? '"$(pm ' + PMS.map(p => q(s.alt[p])).join(' ') + ')"' : q(s.run));
+  const fileBlock = f => {
+    let eof = 'AGENTREADY_EOF';
+    while (f.content.split('\n').includes(eof)) eof += '_';
+    return ['write_file ' + q(f.path) + " <<'" + eof + "'", f.content.replace(/\n$/, ''), eof];
+  };
+  return [].concat([
+    '#!/usr/bin/env bash',
+    '# AgentReady setup script for macOS and Linux. Read it before you run it.',
+    '#   Preview only:  bash agentready-setup.sh --dry-run',
+    '#   Ask each step: add --learn      Run everything: add --auto',
+    '',
+    'GOAL=' + q(mac.goal),
+    'MODE=' + q(mac.mode),
+    'AGENT_CMD=' + q(mac.agentCommand),
+    'WS="$HOME/AgentReady-Workspace"',
+    'DRY=0',
+    'for a in "$@"; do',
+    '  case "$a" in',
+    '    --dry-run) DRY=1 ;;',
+    '    --learn) MODE=learn ;;',
+    '    --auto) MODE=auto ;;',
+    '    *) echo "Unknown option: $a"; exit 2 ;;',
+    '  esac',
+    'done',
+    '',
+    "if [ -t 1 ]; then C='\\033[36m'; G='\\033[32m'; Y='\\033[33m'; R='\\033[31m'; M='\\033[35m'; Z='\\033[0m'; else C=''; G=''; Y=''; R=''; M=''; Z=''; fi",
+    "say() { printf '%b%s%b\\n' \"$1\" \"$2\" \"$Z\"; }",
+    '',
+    'case "$(uname -s)" in',
+    '  Darwin) OS=mac ;;',
+    '  Linux) OS=linux ;;',
+    "  *) echo 'This script is for macOS and Linux. On Windows, download the .ps1 installer from AgentReady instead.'; exit 1 ;;",
+    'esac',
+    'if [ "$DRY" = 0 ] && [ "$(id -u)" = 0 ]; then',
+    "  echo 'Run this as your normal user, not with sudo. It asks for your password only when a step needs it.'; exit 1",
+    'fi',
+    '',
+    '# Linux: find the package manager. pm picks the matching command for a step.',
+    'PM=none',
+    'if [ "$OS" = linux ]; then',
+    '  for p in apt-get dnf pacman zypper; do',
+    '    if command -v "$p" >/dev/null 2>&1; then PM=${p%-get}; break; fi',
+    '  done',
+    'fi',
+    'pm() {',
+    '  case "$PM" in',
+    "    apt) printf '%s' \"$1\" ;;",
+    "    dnf) printf '%s' \"$2\" ;;",
+    "    pacman) printf '%s' \"$3\" ;;",
+    "    zypper) printf '%s' \"$4\" ;;",
+    '  esac',
+    '}',
+    '',
+    '# Make tools installed a moment ago visible to the rest of this run.',
+    'refresh_path() {',
+    '  for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do',
+    '    if [ -x "$b" ]; then eval "$("$b" shellenv)"; fi',
+    '  done',
+    '  if [ -d "$HOME/.local/bin" ]; then',
+    '    case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac',
+    '  fi',
+    '  hash -r 2>/dev/null',
+    '}',
+    '',
+    '# Is a tool really there? macOS ships placeholder git and python3 that only work once the',
+    '# developer tools are installed, and an old Node.js cannot run the agents.',
+    'have() {',
+    '  command -v "$1" >/dev/null 2>&1 || return 1',
+    '  if [ "$OS" = mac ] && [ "$(command -v "$1")" = "/usr/bin/$1" ]; then',
+    '    case "$1" in git|python3) xcode-select -p >/dev/null 2>&1 || return 1 ;; esac',
+    '  fi',
+    '  if [ "$1" = node ]; then',
+    "    node -e 'process.exit(+process.versions.node.split(\".\")[0] >= 20 ? 0 : 1)' 2>/dev/null || return 1",
+    '  fi',
+    '  return 0',
+    '}',
+    '',
+    '# If npm keeps its tools in a system folder, installing them would need sudo. Use ~/.local instead.',
+    'NPM_MOVED=0',
+    'npm_prefix() {',
+    '  p=$(npm config get prefix 2>/dev/null) || return 0',
+    '  if [ -w "$p" ]; then return 0; fi',
+    '  echo "      npm keeps tools in $p, which needs admin rights, so they go in ~/.local instead"',
+    '  mkdir -p "$HOME/.local/bin"',
+    '  npm config set prefix "$HOME/.local"',
+    '  NPM_MOVED=1',
+    '  refresh_path',
+    '}',
+    '',
+    '# The model download needs the Ollama service to be up. Wait for it, and start it if nothing else did.',
+    'ollama_up() {',
+    '  n=0',
+    '  while [ "$n" -lt 15 ]; do',
+    '    if ollama list >/dev/null 2>&1; then return 0; fi',
+    '    if [ "$n" = 3 ]; then (ollama serve >/dev/null 2>&1 &); fi',
+    '    n=$((n + 1)); sleep 2',
+    '  done',
+    '}',
+    '',
+    "LOG=''",
+    'note() { LOG="$LOG${LOG:+,}{\\"step\\":\\"$1\\",\\"status\\":\\"$2\\"}"; }',
+    '',
+    'I=0',
+    'APT_FRESH=0',
+    'step() {  # name, why, command to check for, install command',
+    '  I=$((I + 1)); name=$1; why=$2; check=$3; run=$4',
+    "  echo ''",
+    '  say "$C" "[$I/$TOTAL] $name"',
+    '  echo "      why: $why"',
+    '  if [ -n "$check" ] && have "$check"; then',
+    "    say \"$G\" '      already installed, skipping'; note \"$name\" present; return 0",
+    '  fi',
+    '  if [ -z "$run" ]; then',
+    "    say \"$Y\" '      I do not know the package manager on this system. Install this by hand, then run the script again.'",
+    '    note "$name" manual; return 0',
+    '  fi',
+    '  say "$Y" "      run: $run"',
+    '  if [ "$DRY" = 1 ]; then note "$name" would-run; return 0; fi',
+    '  if [ "$MODE" = learn ]; then',
+    "    printf '      Run this step? (y/n) '; read -r a",
+    "    if [ \"$a\" != y ]; then echo '      skipped by you'; note \"$name\" skipped; return 0; fi",
+    '  fi',
+    '  case "$run" in',
+    "    *'apt-get install'*)",
+    "      if [ \"$APT_FRESH\" = 0 ]; then echo '      first, refresh the package list: sudo apt-get update'; sudo apt-get update; APT_FRESH=1; fi ;;",
+    "    'npm install -g'*) npm_prefix ;;",
+    "    'ollama pull'*) ollama_up ;;",
+    '  esac',
+    '  if eval "$run"; then',
+    "    say \"$G\" '      done'; note \"$name\" installed",
+    '  else',
+    "    say \"$R\" '      FAILED: later steps may need this. Fix it and run the script again; finished steps are skipped.'",
+    '    note "$name" failed',
+    '  fi',
+    '  refresh_path',
+    '}',
+    '',
+    'write_file() {  # path inside the workspace; the content arrives on standard input',
+    '  if [ -e "$WS/$1" ]; then echo "      keep  $1 (exists, not overwritten)"; cat >/dev/null; return 0; fi',
+    '  echo "      write $1"',
+    '  if [ "$DRY" = 1 ]; then cat >/dev/null; return 0; fi',
+    '  mkdir -p "$(dirname "$WS/$1")"',
+    '  cat > "$WS/$1"',
+    '}',
+    '',
+    "echo ''",
+    'say "$M" "AgentReady: $GOAL"',
+    "if [ \"$DRY\" = 1 ]; then say \"$Y\" 'DRY RUN: nothing will be changed.'; fi",
+    'refresh_path',
+    '',
+    'if [ "$OS" = mac ]; then',
+    '  TOTAL=' + mac.steps.length,
+  ], mac.steps.map(stepLine), [
+    'else',
+    '  TOTAL=' + linux.steps.length,
+  ], linux.steps.map(stepLine), [
+    'fi',
+    '',
+    "echo ''",
+    'say "$C" "Workspace: $WS"',
+  ], ...mac.files.map(fileBlock), [
+    '',
+    'if [ "$DRY" = 0 ]; then',
+    '  mkdir -p "$HOME/.agentready"',
+    "  printf '[%s]\\n' \"$LOG\" > \"$HOME/.agentready/last-run.json\"",
+    "  echo ''",
+    "  say \"$M\" 'Next: open a NEW terminal, then run:'",
+    '  echo "  cd \\"$WS\\""',
+    '  echo "  $AGENT_CMD"',
+    "  echo '  ...and paste the prompt from FIRST_TASK.md'",
+    '  if [ "$NPM_MOVED" = 1 ]; then',
+    "    echo ''",
+    "    echo 'If the new terminal cannot find the agent, add this line to ~/.bashrc or ~/.zshrc and open another:'",
+    "    echo '  export PATH=\"$HOME/.local/bin:$PATH\"'",
+    '  fi',
+    'fi',
+    '',
+  ]).join('\n');
+}
+
+// The right installer for an operating system: PowerShell on Windows, one shell script for macOS and Linux.
+function buildInstaller(ctx, os) {
+  const man = o => buildManifest(recommend(Object.assign({}, ctx, { os: o })), ctx);
+  if (os === 'windows') return { name: 'agentready-setup.ps1', text: buildPs1(man('windows')), flag: '-DryRun',
+    runline: 'powershell -ExecutionPolicy Bypass -File .\\agentready-setup.ps1 -DryRun' };
+  return { name: 'agentready-setup.sh', text: buildSh(man('mac'), man('linux')), flag: '--dry-run',
+    runline: 'bash agentready-setup.sh --dry-run' };
+}
+
+if (typeof module !== 'undefined') module.exports = { GOALS, understand, localModel, recommend, buildManifest, buildPs1, buildSh, buildInstaller };
 
 // ---------- UI ----------
 if (typeof document !== 'undefined') (function () {
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const S = { step: 0, skill: 'new', subs: [], mode: 'learn' };
+  const S = { step: 0, skill: 'new', subs: [], mode: 'learn', brain: 'auto' };
 
   $('#itch-rows').innerHTML = ITCHES.map(r =>
     '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td><td><span class="paws" aria-label="' + r[2] + ' of 5">' +
@@ -331,11 +634,20 @@ if (typeof document !== 'undefined') (function () {
     const os = /Windows/.test(ua) ? 'windows' : /Mac/.test(ua) ? 'mac' : /Linux|Android/.test(ua) ? 'linux' : 'windows';
     $('#os').value = os;
     const mem = navigator.deviceMemory;
-    if (mem) { $('#ram').value = mem >= 8 ? '8' : '4'; bits.push('at least ' + mem + ' GB RAM (browsers report 8 at most, so raise it if you have more)'); }
+    if (mem) { $('#ram').value = mem >= 32 ? '32' : mem >= 16 ? '16' : mem >= 8 ? '8' : '4'; bits.push('at least ' + mem + ' GB RAM (browsers report 8 at most, so raise it if you have more)'); }
     else $('#ram').value = '8';
     if (navigator.hardwareConcurrency) bits.push(navigator.hardwareConcurrency + ' CPU threads');
     const c = navigator.connection;
     if (c && (c.saveData || /2g|3g/.test(c.effectiveType || ''))) { $('#net').value = 'patchy'; bits.push('a slow or metered connection'); }
+    // graphics: the browser gives a name but never the memory size, and on laptops it often names only the built-in chip
+    try {
+      const gl = document.createElement('canvas').getContext('webgl');
+      const name = gl.getParameter(gl.getExtension('WEBGL_debug_renderer_info').UNMASKED_RENDERER_WEBGL) || '';
+      const short = (name.match(/(NVIDIA [^,()]+|GeForce [^,()]+|Radeon [^,()]+|Intel[^,()]+|Apple M\d[^,()]*)/) || [''])[0].replace(/ Direct3D.*| OpenGL.*/, '').trim();
+      if (/Apple M\d/.test(name) || (os === 'mac' && /Apple/.test(name))) $('#gpu').value = 'apple';
+      else if (/NVIDIA|GeForce|Radeon RX|Arc\b/.test(name)) $('#gpu').value = '4';
+      if (short) bits.push(short + ' graphics (I cannot read its memory, so check the size)');
+    } catch (e) { /* no WebGL: the user picks */ }
     $('#detected').textContent = bits.length ? 'I sniffed out: ' + bits.join(', ') + '. Correct anything that is wrong.' : 'I could not detect your machine from the browser, so please fill this in.';
   })();
   const hoursOut = () => { const h = +$('#hours').value; $('#hours-out').textContent = h + (h === 1 ? ' hour' : ' hours'); };
@@ -343,12 +655,28 @@ if (typeof document !== 'undefined') (function () {
 
   function ctx() {
     return { goalText: goalEl.value.trim(), skill: S.skill, subs: S.subs, mode: S.mode,
-             os: $('#os').value, ram: +$('#ram').value, net: $('#net').value, hours: +$('#hours').value,
+             os: $('#os').value, ram: +$('#ram').value, gpu: $('#gpu').value, net: $('#net').value, hours: +$('#hours').value,
+             brain: S.brain,
              guard: { destructive: $('#g-destructive').checked, secrets: $('#g-secrets').checked, thirdparty: $('#g-thirdparty').checked } };
   }
 
+  // models step: say what this machine can carry, and what the chosen option means
+  const BRAIN_NOTES = {
+    auto: 'I will use online models, and add an offline one only when your internet or free tier cannot carry you.',
+    cloud: 'Rented models are the smartest and take no disk space. They need internet, and plans have daily limits.',
+    local: 'Private, free and unlimited once downloaded. Local models are smaller and weaker, and offline you chat with the model: it does not run tools for you.',
+    both: 'An online agent for the real work, plus a model on your own machine for when the internet or your quota runs out.',
+  };
+  function brainHint() {
+    const lm = localModel(+$('#ram').value, $('#gpu').value);
+    $('#brain-hint').textContent = BRAIN_NOTES[S.brain] + ' ' + (lm
+      ? 'This machine can carry ' + lm.tag + ' (about ' + lm.size + ' to download). ' + lm.speedText
+      : 'With 4 GB of RAM or less this machine cannot carry a local model, so the setup stays online whatever you pick.');
+  }
+  $('.chips[data-group="brain"]').addEventListener('click', brainHint);
+
   // navigation
-  const LAST = 4;
+  const LAST = 5;
   function go(n) {
     if (n > 0 && !goalEl.value.trim()) {
       matchEl.textContent = 'Type what you want to get done, in any words, or tap an example.';
@@ -360,6 +688,7 @@ if (typeof document !== 'undefined') (function () {
     $('#steps').style.setProperty('--i', n);
     $('#back').hidden = n === 0;
     $('#next').textContent = n === LAST - 1 ? 'Build my setup' : n === LAST ? 'Start over' : 'Next';
+    if (n === 3) brainHint();
     if (n === LAST) render();
     $('#wizard').scrollIntoView({ block: 'start' });
   }
@@ -372,13 +701,12 @@ if (typeof document !== 'undefined') (function () {
     const c = ctx(), plan = recommend(c), man = buildManifest(plan, c);
     current = { c, plan, man };
     const sc = plan.safety.score, col = sc >= 85 ? 'var(--ok)' : sc >= 65 ? 'var(--warn)' : 'var(--bad)';
-    const win = c.os === 'windows';
-    // only show a tip if the tool it leans on is actually in this stack
-    const has = n => plan.goal.needs.includes(n);
-    const tips = plan.goal.tips.filter(t => (!/pandoc/i.test(t) || has('pandoc')) && (!/gh/.test(t) || has('gh')));
+    const win = c.os === 'windows', tips = plan.tips;
+    const inst = buildInstaller(c, win ? 'windows' : 'mac'), other = buildInstaller(c, win ? 'mac' : 'windows');
+    const where = { cloud: 'Runs on online models.', both: 'Runs on online models, with an offline model as backup.', local: 'Runs offline, on your own machine.' }[plan.brain];
     $('#result').innerHTML =
       '<p class="verdict">' + plan.steps.length + ' things to set up. ' + plan.skipped.length + ' left out on purpose.</p>' +
-      '<p class="note">For: <b>' + esc(man.goal) + '</b><br>' + esc(plan.goal.read) + '</p>' +
+      '<p class="note">For: <b>' + esc(man.goal) + '</b><br>' + esc(plan.goal.read) + ' ' + where + '</p>' +
       '<div class="res-grid"><div>' +
         '<div class="card"><h4>Your stack, and why each piece is there</h4>' +
           plan.steps.map((s, i) => '<div class="item" style="--i:' + i + '"><span class="k">' + s.kind + '</span><b>' + esc(s.name) + '</b><p>' + esc(s.why) + '</p></div>').join('') + '</div>' +
@@ -390,25 +718,28 @@ if (typeof document !== 'undefined') (function () {
           '<p class="fine">A check of this setup\'s settings, not a penetration test.</p></div>' +
         '<div class="card cost"><h4>Cost</h4><b>₹0 new spend</b><p>' + esc(plan.cost.text) + '</p><p class="fine">A rough estimate. Provider limits change.</p></div>' +
       '</div></div>' +
-      '<div class="card firstwin"><h4>Your first win, ready to paste</h4><blockquote>' + esc(plan.goal.firstWin) + '</blockquote></div>' +
+      '<div class="card firstwin"><h4>Your first win, ready to paste</h4><blockquote>' + esc(plan.firstWin) + '</blockquote></div>' +
       '<div class="card tips"><h4>After your first win</h4><ol>' + tips.map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div>' +
       '<div class="actions">' +
-        '<button class="btn" id="dl-ps1">Download installer (.ps1)</button>' +
+        '<button class="btn" id="dl-main">Download installer for ' + (win ? 'Windows (.ps1)' : c.os === 'mac' ? 'macOS (.sh)' : 'Linux (.sh)') + '</button>' +
         '<button class="btn ghost" id="preview">Preview dry run</button>' +
+        '<button class="btn ghost" id="dl-other">' + (win ? 'macOS and Linux version (.sh)' : 'Windows version (.ps1)') + '</button>' +
         '<button class="btn ghost" id="dl-json">Download manifest (.json)</button></div>' +
-      (win ? '' : '<p class="note">The installer script is Windows-only for now. On ' + (c.os === 'mac' ? 'macOS' : 'Linux') + ' use the manifest as a checklist: the tools are the same, the install commands differ.</p>') +
-      '<div class="runline">powershell -ExecutionPolicy Bypass -File .\\agentready-setup.ps1 -DryRun</div>' +
-      '<p class="note">Run that first from your Downloads folder to see every step without changing anything. Drop <code>-DryRun</code> to install.</p>' +
+      '<div class="runline">' + esc(inst.runline) + '</div>' +
+      '<p class="note">Run that first from your Downloads folder to see every step without changing anything. Drop <code>' + inst.flag + '</code> to install.' +
+        (win ? '' : ' The same file works on macOS and Linux: it uses Homebrew on a Mac, and apt, dnf, pacman or zypper on Linux.') + '</p>' +
       '<div class="term" id="term" hidden></div>';
     requestAnimationFrame(() => requestAnimationFrame(() => { const r = $('.ring'); if (r) r.style.setProperty('--v', sc); }));
-    $('#dl-ps1').onclick = () => download('agentready-setup.ps1', buildPs1(man));
+    $('#dl-main').onclick = () => download(inst.name, inst.text);
+    $('#dl-other').onclick = () => download(other.name, other.text);
     $('#dl-json').onclick = () => download('agentready-setup.json', JSON.stringify(man, null, 2));
     $('#preview').onclick = () => {
       const t = $('#term'), n = man.steps.length;
       t.hidden = false;
       t.innerHTML = '<span class="y">DRY RUN: nothing will be changed.</span>\n' +
         man.steps.map((s, i) => '\n<span class="g">[' + (i + 1) + '/' + n + '] ' + esc(s.name) + '</span>\n<span class="c">      why: ' + esc(s.why) + '</span>\n' +
-          (s.check ? '<span class="c">      skip if "' + esc(s.check) + '" is already installed</span>\n' : '') + '      run: ' + esc(s.run)).join('\n') +
+          (s.check ? '<span class="c">      skip if "' + esc(s.check) + '" is already installed</span>\n' : '') + '      run: ' + esc(s.run) +
+          (s.alt ? '\n<span class="c">      (shown for Ubuntu and Debian; on Fedora, Arch or openSUSE the script uses dnf, pacman or zypper)</span>' : '')).join('\n') +
         '\n\n<span class="g">Workspace: ~/AgentReady-Workspace</span>\n' + man.files.map(f => '      write ' + esc(f.path)).join('\n');
       t.scrollIntoView({ block: 'nearest' });
     };
