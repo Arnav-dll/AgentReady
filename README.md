@@ -83,11 +83,11 @@ flowchart TD
     Q2 -->|yes| CX[Codex CLI]
     Q2 -->|no| GM[Antigravity CLI on the free tier]
 
-    CC & CX & GM --> Q3{Local model wanted?<br/>You chose offline or both, or on "decide for me":<br/>patchy internet, or heavy use on a free tier}
-    Q3 -->|no| NL[Skip the local model: dead weight]
+    CC & CX & GM --> Q3{"Local model wanted?<br/>You chose offline or both, or on 'decide for me':<br/>patchy internet, or heavy use on a free tier"}
+    Q3 -->|no| NL["Skip the local model: dead weight"]
     Q3 -->|yes| Q4{RAM and graphics card}
-    Q4 -->|4 GB RAM or less| SK[Skip: it would freeze the laptop]
-    Q4 -->|8 GB RAM| L1[Ollama + 1.5b model<br/>3b with a 4 GB card]
+    Q4 -->|4 GB RAM or less| SK["Skip: it would freeze the laptop"]
+    Q4 -->|8 GB RAM| L1["Ollama + 1.5b model<br/>3b with a 4 GB card"]
     Q4 -->|16 GB RAM, or an 8 GB card| L2[Ollama + 7b model]
     Q4 -->|32 GB RAM, or 16 GB RAM with a 12 GB card| L3[Ollama + 14b model]
 
